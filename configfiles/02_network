@@ -83,6 +83,9 @@ rockchip_setup_interfaces()
 		ucidef_add_switch "switch0" \
 			"3:wan" "2:lan" "1:lan" "0:lan" "6t@eth0"
 		;;
+    embedfire,lubancat2n)
+		ucidef_set_interfaces_lan_wan "eth1 eth2 eth3" "eth0"
+		;;
 	*)
 		ucidef_set_interface_lan 'eth0' 'dhcp'
 		;;
@@ -119,6 +122,7 @@ rockchip_setup_macs()
 	nsy,g68-plus|\
 	nsy,g16-plus|\
 	bdy,g18-pro|\
+    embedfire,lubancat2n|\
 	lunzn,fastrhino-r66s|\
 	lunzn,fastrhino-r68s)
 		wan_mac=$(macaddr_generate_from_mmc_cid mmcblk0)
