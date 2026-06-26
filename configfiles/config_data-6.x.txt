@@ -5,7 +5,7 @@ CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_bdy_g18-pro=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_embedfire_lubancat-2n=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s=y
 
-
+CONFIG_PACKAGE_kmod-r8125=y
 CONFIG_PACKAGE_lm-sensors=y
 CONFIG_PACKAGE_lm-sensors-detect=y
 CONFIG_PACKAGE_hostapd-common=y
