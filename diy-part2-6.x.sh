@@ -1,19 +1,18 @@
 #!/bin/bash
 # ============================================================
-# iStoreOS 24.10 (内核 6.6) ROCEOS K50S 云编译 DIY 脚本 v2
-# 修正：使用 files/ 目录直接注入 DTS，替代不可靠的 patch 方式
-# 仓库: xiaobao1980/iStoreOS-RK35XX-24.10-NSY
+# iStoreOS 24.10 ROCEOS K50S 云编译 DIY 脚本
+# 对齐原始仓库工作流：DTS 放 target/linux/rockchip/dts/rk3568/
 # ============================================================
 
 set -e
 
-echo "==================== K50S 24.10 适配开始 (v2) ===================="
+echo "==================== K50S 适配开始 ===================="
 
 # --------------------------------------------------
-# 步骤1: 直接放置 DTS/DTSI 到 files/ 目录
-# OpenWrt 构建时会自动复制到内核源码 arch/arm64/boot/dts/rockchip/
+# 步骤1: 写入 DTS/DTSI 到 target/linux/rockchip/dts/rk3568/
+# 和 nsy_g68-plus 等设备保持一致
 # --------------------------------------------------
-DTS_DIR="target/linux/rockchip/files/arch/arm64/boot/dts/rockchip"
+DTS_DIR="target/linux/rockchip/dts/rk3568"
 mkdir -p "${DTS_DIR}"
 
 # --- 写入 rk3568-roceos-k50s.dtsi ---
@@ -22,8 +21,6 @@ cat > "${DTS_DIR}/rk3568-roceos-k50s.dtsi" << 'DTSI_EOF'
 /*
  * Copyright (c) 2020 Rockchip Electronics Co., Ltd.
  * Copyright (c) 2022 ROCEOS
- *
- * iStoreOS 24.10 (Linux 6.6) Adapted from official v22.03.7 DTS
  */
 
 #include <dt-bindings/gpio/gpio.h>
@@ -908,22 +905,22 @@ cat > "${DTS_DIR}/rk3568-roceos-k50s.dts" << 'DTS_EOF'
 };
 DTS_EOF
 
-echo "==> DTS/DTSI 已写入 ${DTS_DIR}"
+echo "==> DTS 已写入 ${DTS_DIR}"
+ls -la "${DTS_DIR}/rk3568-roceos-k50s"*
 
 # --------------------------------------------------
-# 步骤2: 修改 armv8.mk 添加 K50S 设备定义
+# 步骤2: 修改 armv8.mk，DEVICE_DTS 带 rk3568/ 前缀
+# 和 nsy_g68-plus 的 legacy.mk 路径格式一致
 # --------------------------------------------------
 MK_FILE="target/linux/rockchip/image/armv8.mk"
-
-if [ -f "${MK_FILE}" ]; then
-	if ! grep -q "roceos_k50s" "${MK_FILE}"; then
-		cat >> "${MK_FILE}" << 'MK_EOF'
+if [ -f "${MK_FILE}" ] && ! grep -q "roceos_k50s" "${MK_FILE}"; then
+    cat >> "${MK_FILE}" << 'MK_EOF'
 
 define Device/roceos_k50s
   DEVICE_VENDOR := ROCEOS
   DEVICE_MODEL := K50S
   SOC := rk3568
-  DEVICE_DTS := rk3568-roceos-k50s
+  DEVICE_DTS := rk3568/rk3568-roceos-k50s
   UBOOT_DEVICE_NAME := rk3568-roceos-k50s
   IMAGE/sysupgrade.img.gz := boot-common | boot-script | pine64-img | gzip | append-metadata
   DEVICE_PACKAGES := kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-leds-gpio \
@@ -934,97 +931,62 @@ define Device/roceos_k50s
 endef
 TARGET_DEVICES += roceos_k50s
 MK_EOF
-		echo "==> armv8.mk 已添加 K50S 设备定义"
-	else
-		echo "==> armv8.mk 已存在 K50S，跳过"
-	fi
+    echo "==> armv8.mk 已添加 K50S"
 else
-	echo "警告: 未找到 ${MK_FILE}"
+    echo "==> armv8.mk 已存在 K50S 或文件不存在"
 fi
 
 # --------------------------------------------------
-# 步骤3: 修改 01_network 添加 K50S 网口映射
+# 步骤3: 修改 01_network
 # --------------------------------------------------
 NETWORK_FILE="target/linux/rockchip/armv8/base-files/etc/board.d/01_network"
-
-if [ -f "${NETWORK_FILE}" ]; then
-	if ! grep -q "roceos,k50s" "${NETWORK_FILE}"; then
-		TMP_FILE=$(mktemp)
-		awk '
-			/esac/ && !done {
-				print "\troceos,k50s|"
-				print "\t\tucidef_set_interfaces_lan_wan \"eth1 eth2 eth3 eth4\" \"eth0\""
-				done=1
-			}
-			{print}
-		' "${NETWORK_FILE}" > "${TMP_FILE}"
-		mv "${TMP_FILE}" "${NETWORK_FILE}"
-		chmod +x "${NETWORK_FILE}"
-		echo "==> 01_network 已添加 K50S 配置"
-	else
-		echo "==> 01_network 已存在 K50S，跳过"
-	fi
+if [ -f "${NETWORK_FILE}" ] && ! grep -q "roceos,k50s" "${NETWORK_FILE}"; then
+    TMP_FILE=$(mktemp)
+    awk '
+        /esac/ && !done {
+            print "\troceos,k50s|"
+            print "\t\tucidef_set_interfaces_lan_wan \"eth1 eth2 eth3 eth4\" \"eth0\""
+            done=1
+        }
+        {print}
+    ' "${NETWORK_FILE}" > "${TMP_FILE}"
+    mv "${TMP_FILE}" "${NETWORK_FILE}"
+    chmod +x "${NETWORK_FILE}"
+    echo "==> 01_network 已添加 K50S"
 else
-	echo "警告: 未找到 ${NETWORK_FILE}"
+    echo "==> 01_network 已存在 K50S 或文件不存在"
 fi
 
 # --------------------------------------------------
-# 步骤4: 确保 .config 选中 K50S 及必要驱动
+# 步骤4: 更新 .config
 # --------------------------------------------------
 echo "==> 更新 .config ..."
 
 CONFIG_LINES=(
-	"CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s=y"
-	"CONFIG_PACKAGE_kmod-r8125=y"
-	"CONFIG_PACKAGE_kmod-nvme=y"
-	"CONFIG_PACKAGE_kmod-ata-ahci=y"
-	"CONFIG_PACKAGE_kmod-sata-ahci=y"
-	"CONFIG_PACKAGE_kmod-thermal=y"
-	"CONFIG_PACKAGE_kmod-hwmon-pwmfan=y"
-	"CONFIG_PACKAGE_kmod-leds-gpio=y"
-	"CONFIG_PACKAGE_kmod-gpio-button-hotplug=y"
-	"CONFIG_PACKAGE_kmod-brcmfmac=y"
-	"CONFIG_PACKAGE_brcmfmac-firmware-43430b0=y"
-	"CONFIG_PACKAGE_wpad-basic-mbedtls=y"
-	"CONFIG_PACKAGE_kmod-usb-storage=y"
-	"CONFIG_PACKAGE_kmod-usb-storage-uas=y"
-	"CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"
-	"CONFIG_PACKAGE_kmod-usb-net-rndis=y"
+    "CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s=y"
+    "CONFIG_PACKAGE_kmod-r8125=y"
+    "CONFIG_PACKAGE_kmod-nvme=y"
+    "CONFIG_PACKAGE_kmod-ata-ahci=y"
+    "CONFIG_PACKAGE_kmod-sata-ahci=y"
+    "CONFIG_PACKAGE_kmod-thermal=y"
+    "CONFIG_PACKAGE_kmod-hwmon-pwmfan=y"
+    "CONFIG_PACKAGE_kmod-leds-gpio=y"
+    "CONFIG_PACKAGE_kmod-gpio-button-hotplug=y"
+    "CONFIG_PACKAGE_kmod-brcmfmac=y"
+    "CONFIG_PACKAGE_brcmfmac-firmware-43430b0=y"
+    "CONFIG_PACKAGE_wpad-basic-mbedtls=y"
+    "CONFIG_PACKAGE_kmod-usb-storage=y"
+    "CONFIG_PACKAGE_kmod-usb-storage-uas=y"
+    "CONFIG_PACKAGE_kmod-usb-net-cdc-ether=y"
+    "CONFIG_PACKAGE_kmod-usb-net-rndis=y"
 )
 
 for line in "${CONFIG_LINES[@]}"; do
-	key=$(echo "$line" | cut -d= -f1)
-	if ! grep -q "^${key}=y" .config 2>/dev/null; then
-		echo "$line" >> .config
-	fi
+    key=$(echo "$line" | cut -d= -f1)
+    if ! grep -q "^${key}=y" .config 2>/dev/null; then
+        echo "$line" >> .config
+    fi
 done
-
 echo "==> .config 已更新"
 
-# --------------------------------------------------
-# 步骤5: 确保内核 config 包含必要驱动
-# --------------------------------------------------
-KERNEL_CONFIG="target/linux/rockchip/armv8/config-6.6"
-if [ -f "${KERNEL_CONFIG}" ]; then
-	KCFG_LINES=(
-		"CONFIG_R8125=y"
-		"CONFIG_PHY_ROCKCHIP_NANENG_COMBO_PHY=y"
-		"CONFIG_PCIE_ROCKCHIP_DW_HOST=y"
-		"CONFIG_SATA_AHCI=y"
-		"CONFIG_SATA_AHCI_PLATFORM=y"
-		"CONFIG_NVME_CORE=y"
-		"CONFIG_BLK_DEV_NVME=y"
-		"CONFIG_MMC_SDHCI_ROCKCHIP=y"
-		"CONFIG_BRCMFMAC=y"
-		"CONFIG_BRCMFMAC_SDIO=y"
-	)
-	for line in "${KCFG_LINES[@]}"; do
-		key=$(echo "$line" | cut -d= -f1)
-		if ! grep -q "^${key}=y" "${KERNEL_CONFIG}" 2>/dev/null; then
-			echo "$line" >> "${KERNEL_CONFIG}"
-		fi
-	done
-	echo "==> 内核 config-6.6 已更新"
-fi
-
-echo "==================== K50S 24.10 适配完成 (v2) ===================="
+echo "==================== K50S 适配完成 ===================="
