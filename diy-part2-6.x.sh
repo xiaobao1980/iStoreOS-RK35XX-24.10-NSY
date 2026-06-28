@@ -909,18 +909,21 @@ echo "==> DTS 已写入 ${DTS_DIR}"
 ls -la "${DTS_DIR}/rk3568-roceos-k50s"*
 
 # --------------------------------------------------
-# 步骤2: 修改 armv8.mk，DEVICE_DTS 带 rk3568/ 前缀
-# 和 nsy_g68-plus 的 legacy.mk 路径格式一致
+# 步骤2: 修改 armv8.mk 添加 K50S 设备定义
+# 关键修正：添加 DEVICE_DTS_DIR := ../dts
 # --------------------------------------------------
 MK_FILE="target/linux/rockchip/image/armv8.mk"
-if [ -f "${MK_FILE}" ] && ! grep -q "roceos_k50s" "${MK_FILE}"; then
-    cat >> "${MK_FILE}" << 'MK_EOF'
+
+if [ -f "${MK_FILE}" ]; then
+	if ! grep -q "roceos_k50s" "${MK_FILE}"; then
+		cat >> "${MK_FILE}" << 'MK_EOF'
 
 define Device/roceos_k50s
   DEVICE_VENDOR := ROCEOS
   DEVICE_MODEL := K50S
   SOC := rk3568
   DEVICE_DTS := rk3568/rk3568-roceos-k50s
+  DEVICE_DTS_DIR := ../dts
   UBOOT_DEVICE_NAME := rk3568-roceos-k50s
   IMAGE/sysupgrade.img.gz := boot-common | boot-script | pine64-img | gzip | append-metadata
   DEVICE_PACKAGES := kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-leds-gpio \
@@ -931,9 +934,12 @@ define Device/roceos_k50s
 endef
 TARGET_DEVICES += roceos_k50s
 MK_EOF
-    echo "==> armv8.mk 已添加 K50S"
+		echo "==> armv8.mk 已添加 K50S 设备定义"
+	else
+		echo "==> armv8.mk 已存在 K50S，跳过"
+	fi
 else
-    echo "==> armv8.mk 已存在 K50S 或文件不存在"
+	echo "警告: 未找到 ${MK_FILE}"
 fi
 
 # --------------------------------------------------
