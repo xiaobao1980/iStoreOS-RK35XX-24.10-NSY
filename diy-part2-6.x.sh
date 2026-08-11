@@ -996,3 +996,88 @@ done
 echo "==> .config 已更新"
 
 echo "==================== K50S 适配完成 ===================="
+
+# ============================================================
+# K50S MAX 适配
+# 与 K50S 同 PCB（RK3568，8GB LPDDR4X / 64GB eMMC），硬件完全一致，
+# 直接复用 K50S 的 DTS/DTSI，仅覆盖 model/compatible 生成独立 DTB 便于识别。
+# ============================================================
+echo "==================== K50S MAX 适配开始 ===================="
+
+# --- 写入 rk3568-roceos-k50s-max.dts（thin overlay，复用 K50S DTB） ---
+# 注意：不要再写 /dts-v1/;，由被包含的 rk3568-roceos-k50s.dts 提供，否则 dtc 报重复指令
+cat > "${DTS_DIR}/rk3568-roceos-k50s-max.dts" << 'DTS_MAX_EOF'
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/* Copyright (c) 2022 ROCEOS */
+
+#include "rk3568-roceos-k50s.dts"
+
+/ {
+	model = "ROCEOS K50S MAX";
+	compatible = "roceos,k50s-max", "rockchip,rk3568";
+};
+DTS_MAX_EOF
+
+echo "==> K50S MAX DTS 已写入 ${DTS_DIR}"
+ls -la "${DTS_DIR}/rk3568-roceos-k50s"*
+
+# --- armv8.mk 添加 K50S MAX 设备定义（复用 K50S DTB） ---
+if [ -f "${MK_FILE}" ]; then
+	if ! grep -q "roceos_k50s_max" "${MK_FILE}"; then
+		cat >> "${MK_FILE}" << 'MK_MAX_EOF'
+
+define Device/roceos_k50s_max
+  DEVICE_VENDOR := ROCEOS
+  DEVICE_MODEL := K50S MAX
+  SOC := rk3568
+  DEVICE_DTS := rk3568/rk3568-roceos-k50s-max
+  DEVICE_DTS_DIR := ../dts
+  UBOOT_DEVICE_NAME := rk3568-roceos-k50s
+  IMAGE/sysupgrade.img.gz := boot-common | boot-script | pine64-img | gzip | append-metadata
+  DEVICE_PACKAGES := kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-leds-gpio \
+    kmod-gpio-button-hotplug kmod-usb-net-cdc-ether kmod-usb-net-rndis \
+    kmod-usb-storage kmod-usb-storage-uas kmod-nvme kmod-ata-ahci \
+    kmod-sound-core kmod-sound-soc-rockchip kmod-brcmfmac \
+    brcmfmac-firmware-43430b0 wpad-basic-mbedtls
+endef
+TARGET_DEVICES += roceos_k50s_max
+MK_MAX_EOF
+		echo "==> armv8.mk 已添加 K50S MAX 设备定义"
+	else
+		echo "==> armv8.mk 已存在 K50S MAX，跳过"
+	fi
+else
+	echo "警告: 未找到 ${MK_FILE}"
+fi
+
+# --- 01_network 增加 roceos,k50s-max（与 K50S 相同 LAN/WAN 映射） ---
+if [ -f "${NETWORK_FILE}" ] && ! grep -q "roceos,k50s-max" "${NETWORK_FILE}"; then
+	TMP_FILE=$(mktemp)
+	awk '
+		/esac/ && !done {
+			print "\troceos,k50s-max|"
+			print "\t\tucidef_set_interfaces_lan_wan \"eth1 eth2 eth3 eth4\" \"eth0\""
+			done=1
+		}
+		{print}
+	' "${NETWORK_FILE}" > "${TMP_FILE}"
+	mv "${TMP_FILE}" "${NETWORK_FILE}"
+	chmod +x "${NETWORK_FILE}"
+	echo "==> 01_network 已添加 K50S MAX"
+else
+	echo "==> 01_network 已存在 K50S MAX 或文件不存在"
+fi
+
+# --- .config 增加 K50S MAX 设备选择 ---
+CONFIG_MAX_LINES=(
+	"CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s_max=y"
+)
+for line in "${CONFIG_MAX_LINES[@]}"; do
+	key=$(echo "$line" | cut -d= -f1)
+	if ! grep -q "^${key}=y" .config 2>/dev/null; then
+		echo "$line" >> .config
+	fi
+done
+echo "==> .config 已更新 (K50S MAX)"
+
+echo "==================== K50S MAX 适配完成 ===================="
