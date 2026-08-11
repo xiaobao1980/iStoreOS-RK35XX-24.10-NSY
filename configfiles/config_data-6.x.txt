@@ -2,6 +2,8 @@ CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_xunlong_orangepi-5-plus=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_nsy_g68-plus=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_nsy_g16-plus=y
 CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_bdy_g18-pro=y
+CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s=y
+CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s_max=y
 
 CONFIG_PACKAGE_lm-sensors=y
 CONFIG_PACKAGE_lm-sensors-detect=y
@@ -11,6 +13,7 @@ CONFIG_PACKAGE_kmod-cfg80211=y
 CONFIG_PACKAGE_kmod-mac80211=y
 CONFIG_PACKAGE_kmod-thermal=y
 CONFIG_PACKAGE_kmod-hwmon-pwmfan=y
+CONFIG_PACKAGE_kmod-r8125=y
 CONFIG_PACKAGE_hd-idle=y
 CONFIG_PACKAGE_luci-app-hd-idle=y
 CONFIG_PACKAGE_luci-i18n-hd-idle-zh-cn=y

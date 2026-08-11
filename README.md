@@ -41,6 +41,8 @@
 | STATION-P2     | istoreos-rockchip-armv8-firefly_station-p2-squashfs-sysupgrade.img.gz     |
 | T68M     | istoreos-rockchip-armv8-lyt_t68m-squashfs-sysupgrade.img.gz     |
 | Orange-Pi-5-Plus     | istoreos-rockchip-armv8-xunlong_orangepi-5-plus-squashfs-sysupgrade.img.gz     |
+| K50S           | istoreos-rockchip-armv8-roceos_k50s-squashfs-sysupgrade.img.gz            |
+| K50S MAX       | istoreos-rockchip-armv8-roceos_k50s_max-squashfs-sysupgrade.img.gz        |
 
 ### x86 架构
 
