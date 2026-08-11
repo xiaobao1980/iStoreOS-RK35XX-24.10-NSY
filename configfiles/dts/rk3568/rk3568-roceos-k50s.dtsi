@@ -7,7 +7,7 @@
 #include <dt-bindings/gpio/gpio.h>
 #include <dt-bindings/pinctrl/rockchip.h>
 #include <dt-bindings/pwm/pwm.h>
-#include <dt-bindings/input/rk-input.h>
+#include <dt-bindings/input/linux-event-codes.h>
 #include "rk3568.dtsi"
 
 / {
@@ -60,7 +60,7 @@
 		poll-interval = <100>;
 		recovery-key {
 			label = "Recovery";
-			linux,code = <KEY_VENDOR>;
+			linux,code = <758>;	/* KEY_VENDOR (0x2f6), Rockchip vendor key, not in mainline linux-event-codes.h */
 			press-threshold-microvolt = <1800>;
 		};
 	};
