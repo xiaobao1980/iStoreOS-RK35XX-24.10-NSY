@@ -6,6 +6,33 @@
 
 set -e
 
+# --------------------------------------------------
+# 步骤0: 清洗 .config
+# 根因：OpenWrt 构建在 prepare-tmpinfo 阶段会把 .config 当作 Makefile
+#       include 解析；若 .config 里存在行首 TAB / 行首尾空白 / CR(BOM) /
+#       空行等脏字符，GNU make 会报 “*** missing separator.  Stop.”
+#       （典型表现： workdir/openwrt/.config:NN: *** missing separator）
+# 这里在 make defconfig 之前统一清洗，避免 CI 因传输/编辑引入的脏字符失败。
+# 仅处理 CONFIG_XXX=y / CONFIG_XXX=m / # CONFIG_X is not set 三类合法行，
+# 去除 CR、UTF-8 BOM、行首尾空白、空行、行首 TAB，不影响任何配置语义。
+# --------------------------------------------------
+if [ -f .config ]; then
+	echo "==> 清洗 .config（去除 CR / BOM / 行首尾空白 / 空行 / 行首 TAB）"
+	sed -i \
+		-e 's/\r$//' \
+		-e '1s/^\xEF\xBB\xBF//' \
+		-e 's/^[[:space:]]*//' \
+		-e 's/[[:space:]]*$//' \
+		-e '/^$/d' \
+		.config
+	# 二次兜底：确保仍存在且非空
+	if [ ! -s .config ]; then
+		echo "警告: .config 清洗后为空，可能 mv armv8/.config 未生效"
+	fi
+else
+	echo "==> 未找到 .config，跳过清洗（后续步骤会按需追加设备配置）"
+fi
+
 echo "==================== K50S 适配开始 ===================="
 
 # --------------------------------------------------
