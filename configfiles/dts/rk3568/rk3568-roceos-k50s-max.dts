@@ -1,0 +1,9 @@
+// SPDX-License-Identifier: (GPL-2.0+ OR MIT)
+/* Copyright (c) 2022 ROCEOS */
+
+#include "rk3568-roceos-k50s.dts"
+
+/ {
+	model = "ROCEOS K50S MAX";
+	compatible = "roceos,k50s-max", "rockchip,rk3568";
+};

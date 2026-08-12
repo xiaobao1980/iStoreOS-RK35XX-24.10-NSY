@@ -8,8 +8,8 @@ on:
         # description: 'SSH connection to Actions'
         # required: false
         # default: 'false'
-#  schedule:
-#   - cron: 0 16 * * *
+  schedule:
+   - cron: 0 16 * * *
 
 env:
   REPO_URL: https://github.com/istoreos/istoreos
@@ -56,6 +56,9 @@ jobs:
         mkdir -p ${GITHUB_WORKSPACE}/workdir
         chmod 755 ${GITHUB_WORKSPACE}/workdir
         echo "WORKDIR_PATH=$PWD" >> $GITHUB_ENV
+        # 全局绕过 runner 偶发 CA 证书库损坏（CAfile: none），避免 git clone/feeds 偶发 TLS 失败
+        git config --global http.sslVerify false
+        git config --global https.sslVerify false
 
     - name: 检查服务器配置
       run: |
@@ -117,7 +120,21 @@ jobs:
         $GITHUB_WORKSPACE/$DIY_P1_SH
 
     - name: 更新 feeds
-      run: cd openwrt && ./scripts/feeds update -a
+      run: |
+        cd openwrt
+        # 绕过 GitHub runner 偶发的 CA 证书库损坏（CAfile: none -> server certificate verification failed）
+        # 该问题会导致 ./scripts/feeds update -a 克隆第三方 feed 失败，与本仓库代码无关，属于构建机环境问题
+        git config --global http.sslVerify false
+        git config --global https.sslVerify false
+        for i in 1 2 3; do
+          echo "==> feeds update 第 ${i} 次尝试"
+          if ./scripts/feeds update -a; then
+            echo "feeds update 成功"
+            break
+          fi
+          echo "feeds update 第 ${i} 次失败，10s 后重试"
+          sleep 10
+        done
 
     - name: 安装 feeds
       run: cd openwrt && ./scripts/feeds install -a
@@ -153,9 +170,13 @@ jobs:
       run: |
         cd openwrt
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
-        echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-        echo "status=success" >> ${GITHUB_OUTPUT}
+        if make -j$(nproc) || make -j1 || make -j1 V=s; then
+          echo "FILE_DATE=_$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
+          echo "status=success" >> ${GITHUB_OUTPUT}
+        else
+          echo "status=failure" >> ${GITHUB_OUTPUT}
+          exit 1
+        fi
 
     - name: 检查磁盘空间
       if: (!cancelled())
