@@ -86,7 +86,7 @@
 	};
 };
 
-&sata0 {
+&sata2 {
 	status = "okay";
 };
 
@@ -94,28 +94,6 @@
 	status = "okay";
 	reset-gpios = <&gpio3 RK_PD5 GPIO_ACTIVE_LOW>;
 	post-power-on-delay-ms = <200>;
-};
-
-&wireless_wlan {
-	pinctrl-names = "default";
-	pinctrl-0 = <&wifi_host_wake_irq>;
-	WIFI,host_wake_irq = <&gpio3 RK_PD4 GPIO_ACTIVE_HIGH>;
-	wifi_chip_type = "ap6255";
-	status = "okay";
-};
-
-&wireless_bluetooth {
-	compatible = "bluetooth-platdata";
-	clocks = <&rk809 1>;
-	clock-names = "ext_clock";
-	uart_rts_gpios = <&gpio2 RK_PB1 GPIO_ACTIVE_LOW>;
-	pinctrl-names = "default", "rts_gpio";
-	pinctrl-0 = <&uart8m0_rtsn>;
-	pinctrl-1 = <&uart8_gpios>;
-	BT,reset_gpio    = <&gpio4 RK_PC4 GPIO_ACTIVE_HIGH>;
-	BT,wake_gpio     = <&gpio0 RK_PD5 GPIO_ACTIVE_HIGH>;
-	BT,wake_host_irq = <&gpio0 RK_PD4 GPIO_ACTIVE_HIGH>;
-	status = "okay";
 };
 
 &sdmmc2 {

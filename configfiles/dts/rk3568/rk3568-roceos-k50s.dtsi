@@ -718,22 +718,3 @@
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi1m1_pins>;
 };
-
-&reserved_memory {
-	linux,cma {
-		compatible = "shared-dma-pool";
-		inactive;
-		reusable;
-		reg = <0x0 0x10000000 0x0 0x00800000>;
-		linux,cma-default;
-	};
-
-	ramoops: ramoops@110000 {
-		compatible = "ramoops";
-		reg = <0x0 0x110000 0x0 0xf0000>;
-		record-size = <0x20000>;
-		console-size = <0x80000>;
-		ftrace-size = <0x00000>;
-		pmsg-size = <0x50000>;
-	};
-};
