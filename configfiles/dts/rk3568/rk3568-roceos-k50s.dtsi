@@ -233,17 +233,7 @@
 
 &display_subsystem { status = "disabled"; };
 &hdmi { status = "disabled"; };
-&hdmi_in_vp0 { status = "disabled"; };
-&hdmi_in_vp1 { status = "disabled"; };
-&route_hdmi { status = "disabled"; };
-&codec { status = "okay"; };
 &i2s0_8ch { status = "okay"; };
-&rkcif { status = "disabled"; };
-&rkcif_mmu { status = "disabled"; };
-&rkisp { status = "disabled"; };
-&rkisp_mmu { status = "disabled"; };
-&isp0_mmu { status = "disabled"; };
-&isp1_mmu { status = "disabled"; };
 
 &usb_host0_ehci { status = "okay"; };
 &usb_host0_ohci { status = "okay"; };
@@ -251,9 +241,9 @@
 &usb_host1_ohci { status = "okay"; };
 &usb2phy0 { status = "okay"; };
 &usb2phy1 { status = "okay"; };
-&combphy0_usbc { status = "okay"; };
-&combphy1_usbc { status = "okay"; };
-&combphy2_psq { status = "okay"; };
+&combphy0 { status = "okay"; };
+&combphy1 { status = "okay"; };
+&combphy2 { status = "okay"; };
 
 &pcie2x1 {
 	reset-gpios = <&gpio3 RK_PA5 GPIO_ACTIVE_HIGH>;
@@ -387,7 +377,7 @@
 	status = "okay";
 };
 
-&sata0 { status = "okay"; };
+&sata2 { status = "okay"; };
 
 &tsadc {
 	rockchip,hw-tshut-mode = <0>;
@@ -398,8 +388,6 @@
 &rng { status = "okay"; };
 &otp { status = "okay"; };
 &crypto { status = "okay"; };
-&ppmu { status = "okay"; };
-&dfi { status = "okay"; };
 
 &i2c0 {
 	status = "okay";
@@ -730,19 +718,6 @@
 	status = "okay";
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi1m1_pins>;
-};
-
-&rknpu {
-	rknpu-supply = <&vdd_npu>;
-	status = "okay";
-};
-
-&rknpu_mmu {
-	status = "okay";
-};
-
-&rockchip_suspend {
-	status = "okay";
 };
 
 &reserved_memory {
