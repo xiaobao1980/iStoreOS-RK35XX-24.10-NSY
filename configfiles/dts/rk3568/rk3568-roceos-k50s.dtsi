@@ -283,7 +283,7 @@
 			rockchip,pins = <0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 		soc_slppin_gpio: soc_slppin_gpio {
-			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low_pull_down>;
+			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low>;
 		};
 		soc_slppin_slp: soc_slppin_slp {
 			rockchip,pins = <0 RK_PA2 1 &pcfg_pull_up>;
@@ -694,7 +694,7 @@
 &uart0 {
 	status = "okay";
 	pinctrl-names = "default";
-	pinctrl-0 = <&uart0_xfer &uart0_cts &uart0_rts>;
+	pinctrl-0 = <&uart0_xfer &uart0_ctsn &uart0_rtsn>;
 };
 
 &uart8 {
