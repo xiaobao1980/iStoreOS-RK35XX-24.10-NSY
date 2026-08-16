@@ -323,10 +323,6 @@
 		};
 	};
 	gmac1 {
-		eth1m1_pins: eth1m1-pins {
-			rockchip,pins = <3 RK_PA7 RK_FUNC_GPIO &pcfg_pull_up>,
-					<3 RK_PA6 RK_FUNC_GPIO &pcfg_pull_up>;
-		};
 		gmac1m1_clkinout: gmac1m1-clkinout {
 			rockchip,pins = <2 RK_PD0 2 &pcfg_pull_none>;
 		};
