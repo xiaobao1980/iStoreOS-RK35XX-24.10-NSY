@@ -117,50 +117,90 @@ cp -a $GITHUB_WORKSPACE/configfiles/dts/rk3588/* target/linux/rockchip/dts/rk358
 # 仅由 rk3568-roceos-k50s-max.dts 覆盖 model/compatible 生成独立 DTB。
 # 三个 DTS 文件已放入 configfiles/dts/rk3568/，上面 cp 会自动进内核树。
 # 设备定义追加到 legacy.mk（与 nsy/bdy 同一机制），用 Device/Legacy/rk3568。
+#
+# K50S 硬件 Console 口固定 115200，而 iStoreOS 默认 rk3568 引导链为
+# 1500000，因此新增 U-Boot 变体 easepi-rk3568-uart2-115200 + 专用
+# bootscript，使 DDR/U-Boot/内核三阶段统一 115200。
 # ============================================================
 echo "==================== ROCEOS K50S / K50S MAX 适配开始 ===================="
 
 MK_FILE="target/linux/rockchip/image/legacy.mk"
+UBOOT_MK="package/boot/uboot-rockchip/Makefile"
 CONFIG_K50S_LINES=(
 	"CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s=y"
 	"CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_roceos_k50s_max=y"
 )
 
-# --- legacy.mk 追加 K50S / K50S MAX 设备定义（复用 K50S DTB，防重复） ---
-# 每个设备定义独立守卫：若上游内核树已内置同名设备，则不再追加，避免重复定义报错。
+# --- 复制 K50S 专用 115200 U-Boot 文件与 bootscript ---
+if [ -d "$GITHUB_WORKSPACE/configfiles/uboot-rockchip/src" ]; then
+	cp -a "$GITHUB_WORKSPACE/configfiles/uboot-rockchip/src/"* package/boot/uboot-rockchip/src/
+	echo "==> U-Boot 源码覆盖文件已复制"
+fi
+if [ -f "$GITHUB_WORKSPACE/configfiles/bootscript/rk3568-uart2-115200.bootscript" ]; then
+	cp -f "$GITHUB_WORKSPACE/configfiles/bootscript/rk3568-uart2-115200.bootscript" target/linux/rockchip/image/legacy/
+	echo "==> bootscript rk3568-uart2-115200 已复制"
+fi
+
+# --- 在 uboot-rockchip/Makefile 注册新的 115200 变体 ---
+if [ -f "$UBOOT_MK" ] && ! grep -q "U-Boot/easepi-rk3568-uart2-115200" "$UBOOT_MK"; then
+	awk '
+	/^define U-Boot\/easepi-rk3568-rk809$/ { in_block=1 }
+	in_block && /^endef$/ {
+		print
+		print ""
+		print "define U-Boot/easepi-rk3568-uart2-115200"
+		print "  \$(U-Boot/rk3568/Default)"
+		print "  NAME:=Easepi RK3568 UART2 115200"
+		print "  TPL:=rk3568_ddr_1560MHz_uart2_m0_115200_v1.21.bin"
+		print "  DEPENDS:=+PACKAGE_u-boot-\$(1):trusted-firmware-a-rk3568-e25"
+		print "  UBOOT_CONFIG:=easepi-rk3568-uart2-115200"
+		print "  BUILD_DEVICES:= \"
+		print "    roceos_k50s \"
+		print "    roceos_k50s_max"
+		print "endef"
+		in_block=0
+		next
+	}
+	{ print }
+	' "$UBOOT_MK" > "$UBOOT_MK.tmp" && mv "$UBOOT_MK.tmp" "$UBOOT_MK"
+
+	awk '/^  easepi-rk3568-rk809 \\$/{ print; print "  easepi-rk3568-uart2-115200 \\"; next }1' "$UBOOT_MK" > "$UBOOT_MK.tmp" && mv "$UBOOT_MK.tmp" "$UBOOT_MK"
+	echo "==> uboot-rockchip/Makefile 已注册 easepi-rk3568-uart2-115200"
+else
+	echo "==> uboot-rockchip/Makefile 已存在 115200 变体或文件不存在，跳过"
+fi
+
+# --- legacy.mk 追加/刷新 K50S / K50S MAX 设备定义 ---
+# 先删除旧定义（如有），再统一追加带 115200 U-Boot / bootscript 覆盖的新定义。
 if [ -f "${MK_FILE}" ]; then
-	if ! grep -q "define Device/roceos_k50s$" "${MK_FILE}"; then
-		cat >> "${MK_FILE}" << 'MK_EOF'
+	sed -i '/^define Device\/roceos_k50s$/,/^TARGET_DEVICES += roceos_k50s$/d' "${MK_FILE}"
+	sed -i '/^define Device\/roceos_k50s_max$/,/^TARGET_DEVICES += roceos_k50s_max$/d' "${MK_FILE}"
+
+	cat >> "${MK_FILE}" << 'MK_EOF'
 
 define Device/roceos_k50s
   $(call Device/Legacy/rk3568,$(1))
   DEVICE_VENDOR := ROCEOS
   DEVICE_MODEL := K50S
   DEVICE_DTS := rk3568/rk3568-roceos-k50s
+  UBOOT_DEVICE_NAME := easepi-rk3568-uart2-115200
+  BOOT_SCRIPT := rk3568-uart2-115200
   DEVICE_PACKAGES += kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-usb-storage kmod-usb-storage-uas kmod-nvme kmod-ata-ahci kmod-brcmfmac brcmfmac-firmware-43455-sdio wpad-basic-mbedtls
 endef
 TARGET_DEVICES += roceos_k50s
-MK_EOF
-		echo "==> legacy.mk 已添加 ROCEOS K50S 设备定义"
-	else
-		echo "==> legacy.mk 已存在 K50S，跳过"
-	fi
-	if ! grep -q "define Device/roceos_k50s_max$" "${MK_FILE}"; then
-		cat >> "${MK_FILE}" << 'MK_EOF'
 
 define Device/roceos_k50s_max
   $(call Device/Legacy/rk3568,$(1))
   DEVICE_VENDOR := ROCEOS
   DEVICE_MODEL := K50S MAX
   DEVICE_DTS := rk3568/rk3568-roceos-k50s-max
+  UBOOT_DEVICE_NAME := easepi-rk3568-uart2-115200
+  BOOT_SCRIPT := rk3568-uart2-115200
   DEVICE_PACKAGES += kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-usb-storage kmod-usb-storage-uas kmod-nvme kmod-ata-ahci kmod-brcmfmac brcmfmac-firmware-43455-sdio wpad-basic-mbedtls
 endef
 TARGET_DEVICES += roceos_k50s_max
 MK_EOF
-		echo "==> legacy.mk 已添加 ROCEOS K50S MAX 设备定义"
-	else
-		echo "==> legacy.mk 已存在 K50S MAX，跳过"
-	fi
+	echo "==> legacy.mk 已刷新 ROCEOS K50S / K50S MAX 设备定义（115200）"
 else
 	echo "警告: 未找到 ${MK_FILE}，跳过设备定义追加"
 fi
