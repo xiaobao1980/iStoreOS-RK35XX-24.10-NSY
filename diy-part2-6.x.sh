@@ -154,9 +154,7 @@ if [ -f "$UBOOT_MK" ] && ! grep -q "U-Boot/easepi-rk3568-uart2-115200" "$UBOOT_M
 		print "  TPL:=rk3568_ddr_1560MHz_uart2_m0_115200_v1.21.bin"
 		print "  DEPENDS:=+PACKAGE_u-boot-\$(1):trusted-firmware-a-rk3568-e25"
 		print "  UBOOT_CONFIG:=easepi-rk3568-uart2-115200"
-		print "  BUILD_DEVICES:= \"
-		print "    roceos_k50s \"
-		print "    roceos_k50s_max"
+		print "  DEFAULT:=y"
 		print "endef"
 		in_block=0
 		next

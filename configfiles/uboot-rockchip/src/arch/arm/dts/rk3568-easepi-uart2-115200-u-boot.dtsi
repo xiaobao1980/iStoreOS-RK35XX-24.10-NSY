@@ -1,3 +1,9 @@
 // SPDX-License-Identifier: (GPL-2.0+ OR MIT)
 
 #include "rk3568-easepi-u-boot.dtsi"
+
+/ {
+	chosen {
+		stdout-path = "serial2:115200n8";
+	};
+};
