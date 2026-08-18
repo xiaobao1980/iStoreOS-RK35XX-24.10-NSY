@@ -87,7 +87,12 @@
 };
 
 &sata2 {
-	status = "okay";
+	/* K50S: sata2 shares combphy2 with pcie2x1 (eth2, the 3rd 2.5G r8125
+	   port). RK3568 allows only one function per combphy, so enabling
+	   sata2 here would starve pcie2x1 of its PHY. This board is a
+	   router with no SATA device, so disable sata2 to keep combphy2
+	   free for the 2.5G NIC. Re-enable only if a SATA port is present. */
+	status = "disabled";
 };
 
 &sdio_pwrseq {

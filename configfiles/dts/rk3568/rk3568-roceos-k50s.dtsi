@@ -198,6 +198,14 @@
 		gpio = <&gpio0 RK_PC4 GPIO_ACTIVE_HIGH>;
 		startup-delay-us = <5000>;
 		vin-supply = <&vcc5v0_sys>;
+		/* K50S: pcie3x2 is bifurcated into 2x x1 (lane0 -> pcie3x2,
+		   lane1 -> pcie3x1). Both controllers share this 3.3V rail
+		   (crystal + power on the same route). Per Rockchip PCIe guide,
+		   when split 1+1 the rail must stay always-on, otherwise one
+		   controller toggling vpcie3v3-supply disrupts the other's init
+		   and the link-up busy-waits (RCU stall ~60s at fe270000). */
+		regulator-boot-on;
+		regulator-always-on;
 	};
 
 	fan: fan {
@@ -252,6 +260,14 @@
 };
 
 &pcie3x1 {
+	/* K50S: fe270000 is the second lane of the pcie3x2 (x2) controller,
+	   exposed via bifurcation (1+1). Split requires rockchip,bifurcation
+	   on BOTH pcie3x2 and pcie3x1 nodes (RK3568 PCIe guide).
+	   Both lanes share combphy0 (pcie30phy); override the base-dtsi
+	   phys (combphy1) so lane1 is driven by combphy0. */
+	rockchip,bifurcation;
+	phys = <&combphy0 PHY_TYPE_PCIE>;
+	phy-names = "pcie-phy";
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
@@ -261,12 +277,18 @@
 
 &pcie3x2 {
 	compatible = "rockchip,rk3568-pcie", "snps,dw-pcie";
+	/* Bifurcate the x2 controller into 2x x1: lane0 -> pcie3x2 (eth0),
+	   lane1 -> pcie3x1 (eth1). Must pair with rockchip,bifurcation on
+	   pcie3x1 and data-lanes=<1 2> on pcie30phy. */
+	rockchip,bifurcation;
+	phys = <&combphy0 PHY_TYPE_PCIE>;
+	phy-names = "pcie-phy";
 	reset-gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	status = "okay";
 };
 
-&pcie30phy { status = "okay"; };
+&pcie30phy { data-lanes = <1 2>; status = "okay"; };
 
 &pinctrl {
 	leds {
@@ -709,7 +731,12 @@
 };
 
 &spi0 {
-	status = "okay";
+	/* K50S: fe610000.spi (SPI0 m1) claims gpio2-24 (RK_PD0), which is
+	   gmac1's RGMII ref-clk pin (input mode). That pinctrl conflict
+	   fails gmac1 (eth3) probe. spi0 has no slave device on this board,
+	   so disable it to let gmac1 own the pin. (spi1 already disabled
+	   for the same reason.) */
+	status = "disabled";
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi0m1_pins>;
 };
