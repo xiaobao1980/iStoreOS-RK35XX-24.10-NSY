@@ -1,0 +1,12 @@
+#!/bin/sh
+# ROCEOS K50S / K50S MAX: 将默认 LAN IP 从 iStoreOS 的 192.168.100.1
+# 改为 192.168.10.1。以 zzz 前缀确保在本仓库 clone 的 default-settings
+# 之后执行，覆盖其写入的 192.168.100.1。
+set -e
+
+if uci -q get network.lan >/dev/null 2>&1; then
+	uci -q set network.lan.ipaddr='192.168.10.1'
+	uci -q commit network
+fi
+
+exit 0
