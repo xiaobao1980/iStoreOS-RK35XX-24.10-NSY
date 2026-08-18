@@ -69,11 +69,11 @@ rockchip_setup_interfaces()
 	roceos,k50s|\
 	roceos,k50s-max)
 		# K50S = 3x r8125 (PCIe 2.5G) + 2x GMAC (RK built-in), no switch chip.
-		# All 5 ports are LAN (official iStoreOS v22.03.7 puts the 3 r8125 in br-lan).
+		# Match official iStoreOS v22.03.7: eth0=WAN, eth1-4=LAN.
 		ucidef_set_network_device_path eth0 'platform/3c0000000.pcie/pci0000:00/0000:00:00.0/0000:01:00.0'
 		ucidef_set_network_device_path eth1 'platform/3c0400000.pcie/pci0001:10/0001:10:00.0/0001:11:00.0'
 		ucidef_set_network_device_path eth2 'platform/3c0800000.pcie/pci0002:20/0002:20:00.0/0002:21:00.0'
-		ucidef_set_interface_lan 'eth0 eth1 eth2 eth3 eth4'
+		ucidef_set_interfaces_lan_wan 'eth1 eth2 eth3 eth4' 'eth0'
 		;;
 	easepi,r1|easepi,r1-lite|\
 	linkease,easepi-r1)
@@ -141,7 +141,8 @@ rockchip_setup_macs()
 		;;
 	roceos,k50s|\
 	roceos,k50s-max)
-		lan_mac=$(macaddr_generate_from_mmc_cid mmcblk0)
+		wan_mac=$(macaddr_generate_from_mmc_cid mmcblk0)
+		lan_mac=$(macaddr_add "$wan_mac" 1)
 		;;
 	friendlyarm,nanopi-r4s-enterprise)
 		wan_mac=$(get_mac_binary "/sys/bus/i2c/devices/2-0051/eeprom" 0xfa)
