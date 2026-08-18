@@ -25,7 +25,7 @@
 	};
 
 	chosen: chosen {
-		bootargs = "earlycon=uart8250,mmio32,0xfe660000 console=ttyFIQ0 root=PARTUUID=614e0000-0000 rootfstype=squashfs,ext4";
+		bootargs = "earlycon=uart8250,mmio32,0xfe660000 console=ttyFIQ0 root=PARTUUID=614e0000-0000 rootfstype=squashfs,ext4 initcall_debug";
 	};
 
 	/* gmac0/gmac1 外部参考时钟：本板 clock_in_out="input"，
@@ -714,7 +714,11 @@
 };
 
 &spi1 {
-	status = "okay";
+	/* K50S: gpio2-24 (RK_PD0) is gmac1's RGMII ref-clk pin (input mode).
+	   spi1m1_pins also claims gpio2-24 as SPI1 CLK -> hard pinmux conflict
+	   that fails gmac1 (eth1) probe. spi1 has no slave device on this board,
+	   so disable it to let gmac1 own the pin. */
+	status = "disabled";
 	pinctrl-names = "default";
 	pinctrl-0 = <&spi1m1_pins>;
 };
