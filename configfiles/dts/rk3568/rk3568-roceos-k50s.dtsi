@@ -261,20 +261,22 @@
 
 &pcie3x1 {
 	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2
-	   controller. Mainline 6.6 uses pcie30phy data-lanes + num-lanes to
-	   describe the 1+1 split; do NOT use the vendor-only
-	   rockchip,bifurcation property here. The controllers already inherit
-	   phys=<&pcie30phy> from rk3568.dtsi. */
+	   controller. Mainline 6.6 needs pcie30phy data-lanes + num-lanes, but
+	   the iStoreOS/vendor kernel also recognises rockchip,bifurcation to
+	   configure the PHY split. Keep both so the 2nd lane is definitely
+	   assigned to this controller. */
+	rockchip,bifurcation;
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
-	rockchip,perst-inactive-ms = <500>;
+	rockchip,perst-inactive-ms = <1000>;
 	status = "okay";
 };
 
 &pcie3x2 {
 	/* K50S: fe280000 = pcie3x2 = LANE0 of the bifurcated PCIe3.0 x2.
 	   In 1+1 mode lane0 is owned by pcie3x2, lane1 by pcie3x1. */
+	rockchip,bifurcation;
 	reset-gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
