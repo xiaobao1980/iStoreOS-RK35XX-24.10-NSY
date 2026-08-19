@@ -260,13 +260,15 @@
 };
 
 &pcie3x1 {
-	/* K50S: fe270000 is the second lane of the pcie3x2 (x2) controller,
-	   exposed via bifurcation (1+1). Split requires rockchip,bifurcation
-	   on BOTH pcie3x2 and pcie3x1 nodes (RK3568 PCIe guide).
-	   Both lanes share combphy0 (pcie30phy); override the base-dtsi
-	   phys (combphy1) so lane1 is driven by combphy0. */
+	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2
+	   controller. RK3568 PCIe guide: split the x2 into 2x x1 requires
+	   rockchip,bifurcation on BOTH pcie3x1 and pcie3x2, plus pcie30phy
+	   enabled. The controllers must reference &pcie30phy (the wrapper that
+	   owns combphy0 + the 1+1 split logic) — do NOT point phys at
+	   &combphy0 directly, or the 2nd lane can never train and the kernel
+	   busy-waits ~62s for link-up (RCU stall at fe270000). */
 	rockchip,bifurcation;
-	phys = <&combphy0 PHY_TYPE_PCIE>;
+	phys = <&pcie30phy>;
 	phy-names = "pcie-phy";
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
@@ -276,19 +278,18 @@
 };
 
 &pcie3x2 {
-	compatible = "rockchip,rk3568-pcie", "snps,dw-pcie";
-	/* Bifurcate the x2 controller into 2x x1: lane0 -> pcie3x2 (eth0),
-	   lane1 -> pcie3x1 (eth1). Must pair with rockchip,bifurcation on
-	   pcie3x1 and data-lanes=<1 2> on pcie30phy. */
+	/* K50S: fe280000 = pcie3x2 = LANE0 of the bifurcated PCIe3.0 x2.
+	   Pairs with rockchip,bifurcation on pcie3x1 + pcie30phy enabled.
+	   RK guide: in 1+1 mode lane0 is owned by pcie3x2, lane1 by pcie3x1. */
 	rockchip,bifurcation;
-	phys = <&combphy0 PHY_TYPE_PCIE>;
+	phys = <&pcie30phy>;
 	phy-names = "pcie-phy";
 	reset-gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	status = "okay";
 };
 
-&pcie30phy { data-lanes = <1 2>; status = "okay"; };
+&pcie30phy { status = "okay"; };
 
 &pinctrl {
 	leds {
