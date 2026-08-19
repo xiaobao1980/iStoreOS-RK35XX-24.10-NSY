@@ -289,7 +289,15 @@
 	status = "okay";
 };
 
-&pcie30phy { status = "okay"; };
+/* pcie30phy (fe8c0000) is the shared snps-pcie3 phy for BOTH pcie3x1 and
+   pcie3x2. To split the x2 into 2x x1 (1+1) the phy must be told how the two
+   lanes map to the two controllers via data-lanes (binding rockchip,pcie3-phy:
+   index = lane position, value = controller-number+1; 0 = disabled).
+   lane0 -> pcie3x2 (domain 2), lane1 -> pcie3x1 (domain 1) => <1 2>. */
+&pcie30phy {
+	data-lanes = <1 2>;
+	status = "okay";
+};
 
 &pinctrl {
 	leds {
