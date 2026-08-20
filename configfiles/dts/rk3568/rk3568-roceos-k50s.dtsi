@@ -261,14 +261,17 @@
 
 &pcie3x1 {
 	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2.
-	   This lane is unstable at Gen2 on this board (2026082010: link trained
-	   Gen2 then dropped, r8169 EIO; 2026082012: sometimes no link at all).
-	   Force Gen1 to keep the RTL8125 link up reliably. */
-	rockchip,bifurcation;
+	   The bifurcation is owned by &pcie3x2 (the x2 controller); lane1
+	   must NOT carry rockchip,bifurcation (removed: it was redundant and
+	   confused lane1 init). lane1 is physically unstable at Gen2 on this
+	   board (2026082010: link trained then r8169 EIO; 2012/2017: sometimes
+	   "Phy link never came up"), so keep generous reset timing and let the
+	   link negotiate speed itself. max-link-speed=<1> was also removed
+	   because it does NOT help a link that never trains (Phy link never
+	   came up is a PHY-layer failure, not a speed-negotiation issue). */
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
-	max-link-speed = <1>;
 	rockchip,init-delay-ms = <500>;
 	rockchip,perst-inactive-ms = <2000>;
 	status = "okay";
