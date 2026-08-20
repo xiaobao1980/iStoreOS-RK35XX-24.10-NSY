@@ -264,12 +264,15 @@
 	   controller. Mainline 6.6 needs pcie30phy data-lanes + num-lanes, but
 	   the iStoreOS/vendor kernel also recognises rockchip,bifurcation to
 	   configure the PHY split. Keep both so the 2nd lane is definitely
-	   assigned to this controller. */
+	   assigned to this controller.
+	   The 2nd lane needs more time after vpcie3v3 stabilises; give it a
+	   500 ms init delay and keep PERST# inactive for 2 s. */
 	rockchip,bifurcation;
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
-	rockchip,perst-inactive-ms = <1000>;
+	rockchip,init-delay-ms = <500>;
+	rockchip,perst-inactive-ms = <2000>;
 	status = "okay";
 };
 
@@ -280,6 +283,7 @@
 	reset-gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
+	rockchip,init-delay-ms = <200>;
 	status = "okay";
 };
 
@@ -399,7 +403,6 @@
 	status = "okay";
 };
 
-&sata2 { status = "okay"; };
 
 &tsadc {
 	rockchip,hw-tshut-mode = <0>;
