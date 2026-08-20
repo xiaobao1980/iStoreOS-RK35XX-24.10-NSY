@@ -259,23 +259,6 @@
 	status = "okay";
 };
 
-&pcie3x1 {
-	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2
-	   controller. Mainline 6.6 needs pcie30phy data-lanes + num-lanes, but
-	   the iStoreOS/vendor kernel also recognises rockchip,bifurcation to
-	   configure the PHY split. Keep both so the 2nd lane is definitely
-	   assigned to this controller.
-	   The 2nd lane needs more time after vpcie3v3 stabilises; give it a
-	   500 ms init delay and keep PERST# inactive for 2 s. */
-	rockchip,bifurcation;
-	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
-	vpcie3v3-supply = <&vcc3v3_pcie>;
-	num-lanes = <1>;
-	rockchip,init-delay-ms = <500>;
-	rockchip,perst-inactive-ms = <2000>;
-	status = "okay";
-};
-
 &pcie3x2 {
 	/* K50S: fe280000 = pcie3x2 = LANE0 of the bifurcated PCIe3.0 x2.
 	   In 1+1 mode lane0 is owned by pcie3x2, lane1 by pcie3x1. */
@@ -294,6 +277,25 @@
    lane0 -> pcie3x2 (domain 2), lane1 -> pcie3x1 (domain 1) => <1 2>. */
 &pcie30phy {
 	data-lanes = <1 2>;
+	status = "okay";
+};
+
+/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2 controller.
+   IMPORTANT — this node MUST be defined AFTER &pcie3x2 (lane0) and &pcie30phy
+   in the DTS. RK3568 erratum (Bug 217100 class): when the 2nd lane (pcie3x1)
+   is initialised before lane0 (pcie3x2) on the shared combphy, lane1's config
+   space / link becomes unstable and the RTL8125 probe fails with
+   "error -EIO: PCI read failed" (observed: Gen2 link trained at boot, then
+   dropped, LnkSta DLActive-). Defining pcie3x1 LAST guarantees lane0 + the
+   shared PHY are up first, so lane1 trains and stays up. Do NOT move it above
+   &pcie3x2. */
+&pcie3x1 {
+	rockchip,bifurcation;
+	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
+	vpcie3v3-supply = <&vcc3v3_pcie>;
+	num-lanes = <1>;
+	rockchip,init-delay-ms = <500>;
+	rockchip,perst-inactive-ms = <2000>;
 	status = "okay";
 };
 
