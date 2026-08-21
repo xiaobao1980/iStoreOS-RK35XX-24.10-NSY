@@ -141,6 +141,17 @@ if [ -f "$GITHUB_WORKSPACE/configfiles/bootscript/rk3568-uart2-115200.bootscript
 	echo "==> bootscript rk3568-uart2-115200 已复制"
 fi
 
+# --- K50S MAX: 内核补丁复制到 target/linux/rockchip/patches-6.6（构建时 quilt 自动应用）---
+# 990-dwc-pcie-extend-link-wait.patch: lane1 (pcie3x1/fe270000) 的 RTL8125
+# 链路训练完成时间晚于 mainline 默认 ~1s 等待窗口（LINK_WAIT_MAX_RETRIES=10），
+# 每次启动都报 "Phy link never came up" 丢第三块网卡；rescan 证明硬件完好。
+# 补丁把重试次数 10->100（~10s），link up 即退出循环，不影响其它板。
+if [ -d "$GITHUB_WORKSPACE/configfiles/patches-6.6" ]; then
+	mkdir -p target/linux/rockchip/patches-6.6
+	cp -a "$GITHUB_WORKSPACE/configfiles/patches-6.6/"* target/linux/rockchip/patches-6.6/
+	echo "==> K50S 内核补丁已复制到 target/linux/rockchip/patches-6.6/"
+fi
+
 # --- 在 uboot-rockchip/Makefile 注册新的 115200 变体 ---
 if [ -f "$UBOOT_MK" ] && ! grep -q "U-Boot/easepi-rk3568-uart2-115200" "$UBOOT_MK"; then
 	awk '

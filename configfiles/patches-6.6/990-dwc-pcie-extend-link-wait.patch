@@ -1,0 +1,35 @@
+From: xiaobao <xiaobao@local>
+Date: Fri, 21 Aug 2026 09:50:00 +0800
+Subject: [PATCH] PCI: dwc: extend link-up wait window to ~10s for
+ slow-training endpoints
+
+On ROCEOS K50S MAX (RK3568), the lane1 RTL8125 of the bifurcated
+PCIe3.0 x2 (pcie3x1, fe270000) finishes link training later than the
+default ~1s dw_pcie_wait_for_link() window (10 retries x ~95ms), so
+every boot logs "Phy link never came up" and the third 2.5G NIC is
+missing -- yet the endpoint is perfectly healthy: a manual
+"echo 1 > /sys/bus/pci/rescan" later finds 0001:11:00.0 and r8169
+binds it. Pure boot-time wait-window problem.
+
+Bump LINK_WAIT_MAX_RETRIES 10 -> 100 (~10s worst case). The loop
+breaks as soon as the link is up, so boards with fast links are
+unaffected; the only cost is up to ~9s extra boot time on a slot
+where no device is ever present (not the case on K50S MAX: all
+three PCIe slots are populated).
+
+Signed-off-by: xiaobao <xiaobao@local>
+---
+ drivers/pci/controller/dwc/pcie-designware.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+--- a/drivers/pci/controller/dwc/pcie-designware.h
++++ b/drivers/pci/controller/dwc/pcie-designware.h
+@@ -96,7 +96,7 @@
+ 	set_bit(DW_PCIE_CAP_ ## _cap, &(_pci)->caps)
+ 
+ /* Parameters for the waiting for link up routine */
+-#define LINK_WAIT_MAX_RETRIES		10
++#define LINK_WAIT_MAX_RETRIES		100
+ #define LINK_WAIT_USLEEP_MIN		90000
+ #define LINK_WAIT_USLEEP_MAX		100000
+ 

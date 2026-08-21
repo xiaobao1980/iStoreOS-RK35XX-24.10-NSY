@@ -261,29 +261,31 @@
 
 &pcie3x1 {
 	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2.
-	   The bifurcation is owned by &pcie3x2 (the x2 controller); lane1
-	   must NOT carry rockchip,bifurcation (removed: it was redundant and
-	   confused lane1 init). lane1 is physically unstable at Gen2 on this
-	   board (2026082010: link trained then r8169 EIO; 2012/2017: sometimes
-	   "Phy link never came up"), so keep generous reset timing and let the
-	   link negotiate speed itself. max-link-speed=<1> was also removed
-	   because it does NOT help a link that never trains (Phy link never
-	   came up is a PHY-layer failure, not a speed-negotiation issue). */
+	   Bifurcation is expressed ONLY via &pcie30phy data-lanes=<1 2>:
+	   mainline pcie-dw-rockchip.c does NOT parse rockchip,bifurcation /
+	   rockchip,init-delay-ms / rockchip,perst-inactive-ms (vendor-only
+	   properties, silently ignored), so they are removed. The PERST
+	   pulse is hardcoded in the driver (assert -> enable LTSSM ->
+	   msleep(100) -> deassert).
+	   20260821: lane1 RTL8125 finishes training LATER than the driver's
+	   ~1s dw_pcie_wait_for_link() window -> boot logs "Phy link never
+	   came up", but 0001:11:00.0 appears after a manual pci rescan
+	   (hardware + PA3 PERST proven good). Fixed by kernel patch
+	   configfiles/patches-6.6/990-dwc-pcie-extend-link-wait.patch
+	   (LINK_WAIT_MAX_RETRIES 10->100, ~10s) + rc.local rescan net. */
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
-	rockchip,init-delay-ms = <500>;
-	rockchip,perst-inactive-ms = <2000>;
 	status = "okay";
 };
 
 &pcie3x2 {
-	/* K50S: fe280000 = pcie3x2 = LANE0 of the bifurcation; lane0 is stable. */
-	rockchip,bifurcation;
+	/* K50S: fe280000 = pcie3x2 = LANE0 of the bifurcation; lane0 is stable.
+	   No rockchip,bifurcation here: mainline ignores it, the 1+1 split
+	   comes from &pcie30phy data-lanes=<1 2>. */
 	reset-gpios = <&gpio3 RK_PA4 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
-	rockchip,init-delay-ms = <200>;
 	status = "okay";
 };
 
