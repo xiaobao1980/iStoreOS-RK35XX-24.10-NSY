@@ -261,19 +261,20 @@
 
 &pcie3x1 {
 	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2.
-	   Bifurcation is expressed ONLY via &pcie30phy data-lanes=<1 2>;
-	   mainline ignores rockchip,bifurcation / init-delay-ms /
-	   perst-inactive-ms (vendor-only), PERST pulse is hardcoded 100ms.
 	   20260821 root cause: lane1's RTL8125 only becomes trainable AFTER
 	   pcie3x2 (lane0, bifurcation master) probes -- its PERST# appears
-	   wired to the x2 controller's reset (PA4), so while pcie3x1 probed
-	   first it could never train ("Phy link never came up" even with a
-	   ~10s wait window); a later pci rescan always found 0001:11:00.0.
-	   Fix: kernel patch 991 moves the pcie3x1 node after pcie3x2 in the
-	   base rk3568.dtsi so the master probes (and pulses PERST) first;
-	   patch 990 (LINK_WAIT_MAX_RETRIES 10->100) adds margin; rc.local
-	   rescan is the runtime safety net. PA3 kept as-is (claimed and
-	   driven fine, harmless even if it is a no-connect on this PCB). */
+	   wired to the x2 controller's reset (PA4). Sync probing can NEVER
+	   fix this: pcie3x2 only starts probing after pcie3x1's probe
+	   returns, i.e. after its link-wait already expired ("Phy link
+	   never came up"), and a longer wait just pushes pcie3x2 later.
+	   Base-dtsi node reorder was attempted twice via quilt patch but
+	   the istoreos-24.10 patch series pre-image is a moving target;
+	   dtc /delete-node/ + re-declare does NOT move nodes (verified:
+	   dtc keeps the original slot). Fix: kernel patch
+	   992-pci-dw-rockchip-async-probe (PROBE_PREFER_ASYNCHRONOUS) so
+	   pcie3x2 probes in parallel, pulses the shared PERST# and lane1
+	   trains inside pcie3x1's (patch-990 extended ~10s) wait window.
+	   rc.local rescan remains as the runtime safety net. */
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;

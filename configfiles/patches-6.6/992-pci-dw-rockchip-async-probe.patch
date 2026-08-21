@@ -1,0 +1,36 @@
+From: xiaobao <xiaobao@local>
+Date: Fri, 21 Aug 2026 13:05:00 +0800
+Subject: [PATCH] PCI: dwc: rockchip: probe asynchronously
+
+On ROCEOS K50S MAX (RK3568, PCIe3.0 x2 bifurcated 1+1 with two RTL8125),
+the lane1 endpoint (behind pcie3x1/fe270000) only becomes trainable
+AFTER the pcie3x2 (lane0, bifurcation master) controller probes, because
+its PERST# is wired to the x2 controller's reset line. With synchronous
+probing this can never work: pcie3x2 only starts probing after pcie3x1's
+probe returns, i.e. after pcie3x1's dw_pcie_wait_for_link() window has
+already expired ("Phy link never came up"), and making that window
+longer merely postpones pcie3x2's probe as well. Base-dtsi node reorder
+is fragile against the istoreos-24.10 patch series pre-image, and dtc
+/delete-node/ + re-declare does not change FDT node order.
+
+Mark the driver PROBE_PREFER_ASYNCHRONOUS so all Rockchip PCIe host
+controllers probe in parallel: pcie3x2 then pulses the shared PERST#
+immediately, the lane1 endpoint comes alive, and pcie3x1's (extended)
+link-wait window catches the training. Controllers are independent
+(reset/clk/regulator frameworks are thread-safe; the shared pcie30phy
+is serialized by phy-core's mutex + refcounting). PCI domains and bus
+numbering come from DT and are unchanged.
+
+Signed-off-by: xiaobao <xiaobao@local>
+diff --git a/drivers/pci/controller/dwc/pcie-dw-rockchip.c b/drivers/pci/controller/dwc/pcie-dw-rockchip.c
+index 05ff855..2409f5f 100644
+--- a/drivers/pci/controller/dwc/pcie-dw-rockchip.c
++++ b/drivers/pci/controller/dwc/pcie-dw-rockchip.c
+@@ -381,6 +381,7 @@ static struct platform_driver rockchip_pcie_driver = {
+ 	.driver = {
+ 		.name	= "rockchip-dw-pcie",
+ 		.of_match_table = rockchip_pcie_of_match,
++		.probe_type = PROBE_PREFER_ASYNCHRONOUS,
+ 		.suppress_bind_attrs = true,
+ 	},
+ 	.probe = rockchip_pcie_probe,

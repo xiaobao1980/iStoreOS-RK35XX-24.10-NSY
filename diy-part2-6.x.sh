@@ -143,9 +143,10 @@ fi
 
 # --- K50S MAX: 内核补丁复制到 target/linux/rockchip/patches-6.6（构建时 quilt 自动应用）---
 # 990-dwc-pcie-extend-link-wait.patch: lane1 训练慢，等待窗口 ~1s -> ~10s。
-# 991-dts-rk3568-move-pcie3x1-after-pcie3x2.patch: lane1 的 RTL8125 要等
-# pcie3x2（bifurcation 主控）probe/复位后才可训练（疑似 PERST# 共用 PA4），
-# 把 base dtsi 里 pcie3x1 节点移到 pcie3x2 之后使主控先 probe。
+# 992-pci-dw-rockchip-async-probe.patch: lane1 的 RTL8125 要等 pcie3x2
+# （bifurcation 主控）打 PERST 脉冲后才可训练；同步 probe 下 pcie3x2 必然
+# 在 pcie3x1 等待结束后才开始 → 永远训练不了。异步 probe 让两者并行。
+# （base dtsi 重排序已放弃：istoreos 补丁系列前置状态漂移 + dtc 删除重建不换序）
 if [ -d "$GITHUB_WORKSPACE/configfiles/patches-6.6" ]; then
 	mkdir -p target/linux/rockchip/patches-6.6
 	cp -a "$GITHUB_WORKSPACE/configfiles/patches-6.6/"* target/linux/rockchip/patches-6.6/
