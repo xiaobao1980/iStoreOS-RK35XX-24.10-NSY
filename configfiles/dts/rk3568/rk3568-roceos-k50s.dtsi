@@ -8,6 +8,7 @@
 #include <dt-bindings/pinctrl/rockchip.h>
 #include <dt-bindings/pwm/pwm.h>
 #include <dt-bindings/input/linux-event-codes.h>
+#include <dt-bindings/soc/rockchip,vop2.h>
 #include <rockchip/rk3568.dtsi>
 #include "rk3568-ip.dtsi"
 #include "rk3568-ip-rk809.dtsi"
@@ -208,6 +209,18 @@
 		regulator-always-on;
 	};
 
+	/* 20260821: HDMI 输出 —— hdmi-connector（仿 mainline rock-3a 接法） */
+	hdmi_con: hdmi-con {
+		compatible = "hdmi-connector";
+		type = "a";
+
+		port {
+			hdmi_con_in: endpoint {
+				remote-endpoint = <&hdmi_out_con>;
+			};
+		};
+	};
+
 	fan: fan {
 		compatible = "pwm-fan";
 		#cooling-cells = <2>;
@@ -239,12 +252,52 @@
 	vccio7-supply = <&vcc_3v3>;
 };
 
-&display_subsystem { status = "disabled"; };
-&hdmi { status = "disabled"; };
+/* 20260821: 开启 HDMI 输出（mainline rock-3a 接法；avdd 由 rk809 镜像 LDO 提供，
+   与 22.03 厂商基线一致；CEC 用 base 默认 hdmitxm0_cec） */
+&display_subsystem { status = "okay"; };
+
+&hdmi {
+	avdd-0v9-supply = <&vdda0v9_image>;
+	avdd-1v8-supply = <&vcca1v8_image>;
+	status = "okay";
+};
+
+&hdmi_in {
+	hdmi_in_vp0: endpoint {
+		remote-endpoint = <&vp0_out_hdmi>;
+	};
+};
+
+&hdmi_out {
+	hdmi_out_con: endpoint {
+		remote-endpoint = <&hdmi_con_in>;
+	};
+};
+
+&hdmi_sound { status = "okay"; };
+
+&vp0 {
+	vp0_out_hdmi: endpoint@ROCKCHIP_VOP2_EP_HDMI0 {
+		reg = <ROCKCHIP_VOP2_EP_HDMI0>;
+		remote-endpoint = <&hdmi_in_vp0>;
+	};
+};
+
+&vop {
+	assigned-clocks = <&cru DCLK_VOP0>, <&cru DCLK_VOP1>;
+	assigned-clock-parents = <&pmucru PLL_HPLL>, <&cru PLL_VPLL>;
+	status = "okay";
+};
+
+&vop_mmu { status = "okay"; };
 &i2s0_8ch { status = "okay"; };
 
-&usb_host0_ehci { status = "okay"; };
-&usb_host0_ohci { status = "okay"; };
+/* 20260821: usb_host0 的 OHCI 口（usb 3-1, fd840000）出现幻影全速连接风暴：
+   无限 "device descriptor read/64, error -62" 枚举失败刷屏，数小时无一设备
+   成功。该口无可用设备，连同 EHCI 一并禁用以止刷屏；若需使用此 USB 口，
+   请恢复并排查端口硬件（可能悬空或损坏）。 */
+&usb_host0_ehci { status = "disabled"; };
+&usb_host0_ohci { status = "disabled"; };
 &usb_host1_ehci { status = "okay"; };
 &usb_host1_ohci { status = "okay"; };
 &usb2phy0 { status = "okay"; };
