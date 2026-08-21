@@ -50,4 +50,22 @@ pcie_lane1_rescan() {
 
 pcie_lane1_rescan
 
+# K50S/K50S MAX: netifd 启动（~30s）早于 eth_order 重命名完成（eth4 ~45s 才
+# 出现），wan 会被标记 device-missing 后不再自动拉起（ifstatus up:false、
+# udhcpc 不运行）。boot 末尾补一次 ifup 自愈；已 up 时为空操作。
+k50s_wan_ifup() {
+    local board=$(board_name)
+    case "$board" in
+        roceos,k50s|roceos,k50s-max)
+            (
+            sleep 3
+            ifstatus wan 2>/dev/null | grep -q '"up": true' || ifup wan
+            ifstatus wan6 2>/dev/null | grep -q '"up": true' || ifup wan6
+            ) &
+            ;;
+    esac
+}
+
+k50s_wan_ifup
+
 exit 0
