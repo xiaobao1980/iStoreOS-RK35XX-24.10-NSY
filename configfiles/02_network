@@ -69,13 +69,15 @@ rockchip_setup_interfaces()
 	roceos,k50s|\
 	roceos,k50s-max)
 		# K50S = 3x r8125 (PCIe 2.5G) + 2x GMAC (RK built-in), no switch chip.
-		# eth_order in the DTS fixes the interface names so that:
-		#   eth0 = pcie2x1 (0000:01:00.0) -> WAN
-		#   eth1 = pcie3x1 (0001:11:00.0) -> LAN
-		#   eth2 = pcie3x2 (0002:21:00.0) -> LAN
+		# eth_order in the DTS fixes the interface names. 20260821 用户按
+		# 机箱物理口顺序实测（LAN1->LAN3 分别显示为 eth1/eth2/eth0），
+		# 轮换修正为物理顺序：
+		#   eth0 = pcie3x1 (0001:11:00.0) -> LAN (物理 LAN1)
+		#   eth1 = pcie3x2 (0002:21:00.0) -> LAN (物理 LAN2)
+		#   eth2 = pcie2x1 (0000:01:00.0) -> LAN (物理 LAN3)
 		#   eth3 = gmac1   (fe010000.ethernet) -> LAN
-		#   eth4 = gmac0   (fe2a0000.ethernet) -> LAN
-		ucidef_set_interfaces_lan_wan 'eth1 eth2 eth3 eth4' 'eth0'
+		#   eth4 = gmac0   (fe2a0000.ethernet) -> WAN
+		ucidef_set_interfaces_lan_wan 'eth0 eth1 eth2 eth3' 'eth4'
 		;;
 	easepi,r1|easepi,r1-lite|\
 	linkease,easepi-r1)

@@ -11,7 +11,9 @@
 / {
 	model = "ROCEOS K50S";
 	compatible = "roceos,k50s", "rockchip,rk3568", "gmac_1v8";
-	eth_order = "0000:01:00.0,0001:11:00.0,0002:21:00.0,fe010000.ethernet,fe2a0000.ethernet";
+	/* 20260821: rotate to physical jack order (user tested each port:
+	   LAN1=pcie3x1, LAN2=pcie3x2, LAN3=pcie2x1, LAN4=gmac1, WAN=gmac0) */
+	eth_order = "0001:11:00.0,0002:21:00.0,0000:01:00.0,fe010000.ethernet,fe2a0000.ethernet";
 	kdebug = "0";
 	hwmodel_id = "K50S";
 	eth_driver = "r8125";

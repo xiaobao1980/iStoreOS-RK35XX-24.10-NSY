@@ -29,7 +29,7 @@ mtk_wifi
 
 # K50S/K50S MAX 兜底：lane1 (pcie3x1/fe270000) 的 RTL8125 链路训练慢，
 # 若内核 link-wait 补丁仍未兜住，运行期周期性 rescan 把 0001:11:00.0 捞出来，
-# 出现后 r8169 自动绑定并按 eth_order 命名 eth1 加入 br-lan（02_network 已含 eth1）。
+# 出现后 r8169 自动绑定并按 eth_order 命名 eth0（物理 LAN1）加入 br-lan（02_network 已含）。
 pcie_lane1_rescan() {
     local board=$(board_name)
     case "$board" in
