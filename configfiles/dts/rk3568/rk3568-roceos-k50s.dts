@@ -29,7 +29,9 @@
 	phy-mode = "rgmii";
 	clock_in_out = "input";
 	snps,reset-gpio = <&gpio2 RK_PD3 GPIO_ACTIVE_LOW>;
-	snps,reset-active-low;
+	snps,reset-active-high;
+	/* 20260821: 复位极性按厂商 22.03 基线（active-high）；误写 active-low
+	   时 probe 无有效复位脉冲，PHY 保持上电 strap 状态 -> 千兆死百兆活 */
 	snps,reset-delays-us = <0 20000 100000>;
 	assigned-clocks = <&cru SCLK_GMAC0_RX_TX>, <&cru SCLK_GMAC0>;
 	assigned-clock-parents = <&cru SCLK_GMAC0_RGMII_SPEED>, <&gmac0_clkin>;
