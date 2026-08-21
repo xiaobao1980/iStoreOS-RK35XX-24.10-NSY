@@ -261,18 +261,19 @@
 
 &pcie3x1 {
 	/* K50S: fe270000 = pcie3x1 = LANE1 of the bifurcated PCIe3.0 x2.
-	   Bifurcation is expressed ONLY via &pcie30phy data-lanes=<1 2>:
-	   mainline pcie-dw-rockchip.c does NOT parse rockchip,bifurcation /
-	   rockchip,init-delay-ms / rockchip,perst-inactive-ms (vendor-only
-	   properties, silently ignored), so they are removed. The PERST
-	   pulse is hardcoded in the driver (assert -> enable LTSSM ->
-	   msleep(100) -> deassert).
-	   20260821: lane1 RTL8125 finishes training LATER than the driver's
-	   ~1s dw_pcie_wait_for_link() window -> boot logs "Phy link never
-	   came up", but 0001:11:00.0 appears after a manual pci rescan
-	   (hardware + PA3 PERST proven good). Fixed by kernel patch
-	   configfiles/patches-6.6/990-dwc-pcie-extend-link-wait.patch
-	   (LINK_WAIT_MAX_RETRIES 10->100, ~10s) + rc.local rescan net. */
+	   Bifurcation is expressed ONLY via &pcie30phy data-lanes=<1 2>;
+	   mainline ignores rockchip,bifurcation / init-delay-ms /
+	   perst-inactive-ms (vendor-only), PERST pulse is hardcoded 100ms.
+	   20260821 root cause: lane1's RTL8125 only becomes trainable AFTER
+	   pcie3x2 (lane0, bifurcation master) probes -- its PERST# appears
+	   wired to the x2 controller's reset (PA4), so while pcie3x1 probed
+	   first it could never train ("Phy link never came up" even with a
+	   ~10s wait window); a later pci rescan always found 0001:11:00.0.
+	   Fix: kernel patch 991 moves the pcie3x1 node after pcie3x2 in the
+	   base rk3568.dtsi so the master probes (and pulses PERST) first;
+	   patch 990 (LINK_WAIT_MAX_RETRIES 10->100) adds margin; rc.local
+	   rescan is the runtime safety net. PA3 kept as-is (claimed and
+	   driven fine, harmless even if it is a no-connect on this PCB). */
 	reset-gpios = <&gpio3 RK_PA3 GPIO_ACTIVE_HIGH>;
 	vpcie3v3-supply = <&vcc3v3_pcie>;
 	num-lanes = <1>;
