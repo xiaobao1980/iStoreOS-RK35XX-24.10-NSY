@@ -512,6 +512,10 @@
 
 &rknpu {
 	/delete-property/ power-domains;
+	/* rk3568-npu.dtsi 的 rknpu 节点只写了 interrupts、没写 interrupt-names，
+	   而 rknpu 驱动(6.6 分支)用 platform_get_irq_byname(pdev,"npu_irq")
+	   要这个名字，缺失即 -ENXIO -> probe 失败（2026082215 实测）。补上。 */
+	interrupt-names = "npu_irq";
 	rknpu-supply = <&vdd_npu>;
 	status = "okay";
 };
