@@ -486,9 +486,17 @@
 	status = "okay";
 };
 
-/* 20260822: 启用 NPU（rk3568-npu.dtsi 节点默认 disabled；vdd_npu=rk809
-   DCDC4 已配置）。注意 iStoreOS 开机脚本会 disable_kmod rknpu，需在
-   驱动管理/quickstart 中放开后 /dev/rknpu* 才出现。 */
+/* 20260822: 启用 NPU，但必须把 PD_NPU 从 genpd 管理中移除——否则开机
+   genpd 给"无驱动"的 PD_NPU 断电时，rockchip_pmu_save_qos 读 qos_npu
+   (fe180000) 直接 synchronous external abort（2026082209 实测 7.8s 崩溃，
+   该域 QoS 寄存器在域断电时不可访问）。rknpu 是模块且 iStoreOS 默认
+   disable_kmod，域注定长期无驱动。删掉 power-domain 节点并让 rknpu 不带
+   power-domains：域保持硬件默认上电，rknpu 模块（驱动管理里勾选后）加载
+   即可 probe（时钟/复位/regulator 路径不受影响）。 */
+&power {
+	/delete-node/ power-domain@RK3568_PD_NPU;
+};
+
 &bus_npu {
 	bus-supply = <&vdd_logic>;
 	pvtm-supply = <&vdd_cpu>;
@@ -496,6 +504,7 @@
 };
 
 &rknpu {
+	/delete-property/ power-domains;
 	rknpu-supply = <&vdd_npu>;
 	status = "okay";
 };
