@@ -373,6 +373,17 @@
 	status = "okay";
 };
 
+/* 20260822: 启用 M.2 存储。本板 M.2 (M-key) 是 SATA，不是 NVMe：
+   RK3568 只有 3 个 PCIe 控制器，全被 5×RTL8125 网卡占用
+   (domain 0000=pcie2x1 / 0001=pcie3x1 / 0002=pcie3x2)，无多余 PCIe lane
+   给 NVMe。M.2 的 SATA 信号接 sata0(combphy0)，22.03 厂商基线正是
+   &sata0 okay。当前 combphy0 未被 USB3.0 占用，故直接 okay 即可，
+   与 3 个 PCIe 网卡共存。注意 &sata2(combphy2) 在 .dts 里仍 disabled，
+   保留给 pcie2x1(eth2)，不要动。插 M.2 SATA SSD 后可见 /dev/sda。 */
+&sata0 {
+	status = "okay";
+};
+
 &pinctrl {
 	leds {
 		led_green_en: led-green-en {
