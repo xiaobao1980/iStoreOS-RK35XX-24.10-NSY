@@ -373,15 +373,27 @@
 	status = "okay";
 };
 
-/* 20260822: 启用 M.2 存储。本板 M.2 (M-key) 是 SATA，不是 NVMe：
-   RK3568 只有 3 个 PCIe 控制器，全被 5×RTL8125 网卡占用
-   (domain 0000=pcie2x1 / 0001=pcie3x1 / 0002=pcie3x2)，无多余 PCIe lane
-   给 NVMe。M.2 的 SATA 信号接 sata0(combphy0)，22.03 厂商基线正是
-   &sata0 okay。当前 combphy0 未被 USB3.0 占用，故直接 okay 即可，
-   与 3 个 PCIe 网卡共存。注意 &sata2(combphy2) 在 .dts 里仍 disabled，
-   保留给 pcie2x1(eth2)，不要动。插 M.2 SATA SSD 后可见 /dev/sda。 */
+/* 20260822: 存储接口修复（拓扑已用 22.03 厂商镜像 dmesg 核实）。
+   - 板载 SATA 口（接 2.5"/3.5" SATA 盘，22.03 里为 /dev/sdb 4TB 机械盘）走
+     sata0，使用 combphy0。需禁用 combphy0 上的 USB3.0 (usb_host0_xhci) 以释放
+     phy，对应 22.03 基线的 rockchip,dis-u3otg0-port。
+   - M.2 槽（22.03 里为 /dev/sda 240GB，走 xhci SuperSpeed usb 4-1）既不是
+     PCIe NVMe，也不是 SATA，而是 combphy1 的 USB3.0，对应 usb_host1_xhci。
+     RK3568 仅 3 个 PCIe 控制器全被 5×RTL8125 占用，故 M.2 无 NVMe 通道，
+     产品页 "M.2 NVMe" 描述不实。M.2 转接的 UAS 盘会被识别为 /dev/sda。
+   - 注意 &sata2(combphy2) 在 .dts 里仍 disabled，保留给 pcie2x1(eth2)，勿动。 */
+&usb_host0_xhci {
+	status = "disabled";	/* combphy0 专给 sata0，避免抢 phy */
+};
+
+&usb_host1_xhci {
+	dr_mode = "host";
+	status = "okay";	/* combphy1 → M.2 槽 USB3.0 */
+	extcon = <&usb2phy1>;
+};
+
 &sata0 {
-	status = "okay";
+	status = "okay";	/* 板载 SATA 口，combphy0 */
 };
 
 &pinctrl {
