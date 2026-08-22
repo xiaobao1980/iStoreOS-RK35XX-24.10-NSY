@@ -490,9 +490,16 @@
    genpd 给"无驱动"的 PD_NPU 断电时，rockchip_pmu_save_qos 读 qos_npu
    (fe180000) 直接 synchronous external abort（2026082209 实测 7.8s 崩溃，
    该域 QoS 寄存器在域断电时不可访问）。rknpu 是模块且 iStoreOS 默认
-   disable_kmod，域注定长期无驱动。删掉 power-domain 节点并让 rknpu 不带
-   power-domains：域保持硬件默认上电，rknpu 模块（驱动管理里勾选后）加载
-   即可 probe（时钟/复位/regulator 路径不受影响）。 */
+   disable_kmod，域注定长期无驱动。删掉 power-domain 节点：域保持硬件
+   默认上电，rknpu 模块（驱动管理里勾选后）加载即可 probe。
+
+   20260822b: 关键补漏——rk3568-npu.dtsi 里 rknpu 和 rknpu_mmu 都挂着
+   power-domains=<&power RK3568_PD_NPU>。上一轮只删了 &rknpu 的，漏了
+   &rknpu_mmu（IOMMU 节点，fde4b000）。域节点删掉后该引用悬空 →
+   rknpu_mmu 永远 probe 不起来 → rknpu 拿不到 iommu group →
+   "if (!iommu_group) return -EINVAL"（drv.c）-> error -22，且日志里
+   看到 rknpu 等 IOMMU 依赖 deferred probe timeout。这里把 rknpu_mmu 的
+   power-domains 一并删掉，IOMMU 始终上电、正常建 group，rknpu 才能过。 */
 &power {
 	/delete-node/ power-domain@RK3568_PD_NPU;
 };
@@ -509,7 +516,10 @@
 	status = "okay";
 };
 
-&rknpu_mmu { status = "okay"; };
+&rknpu_mmu {
+	/delete-property/ power-domains;
+	status = "okay";
+};
 
 &rng { status = "okay"; };
 &otp { status = "okay"; };
