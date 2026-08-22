@@ -486,22 +486,26 @@
 	status = "okay";
 };
 
-/* 20260822: 启用 NPU，但必须把 PD_NPU 从 genpd 管理中移除——否则开机
-   genpd 给"无驱动"的 PD_NPU 断电时，rockchip_pmu_save_qos 读 qos_npu
-   (fe180000) 直接 synchronous external abort（2026082209 实测 7.8s 崩溃，
-   该域 QoS 寄存器在域断电时不可访问）。rknpu 是模块且 iStoreOS 默认
-   disable_kmod，域注定长期无驱动。删掉 power-domain 节点：域保持硬件
-   默认上电，rknpu 模块（驱动管理里勾选后）加载即可 probe。
+/* 20260822c: NPU 电源域最终修法（PD_NPU 必须上电，且不能让 genpd 在开机
+   给 driver-less 域断电时读 qos 寄存器 abort）。
+   复盘：
+   - 原始 stock（rk3568-npu.dtsi 原样 enable）：开机 genpd 给无驱动的
+     PD_NPU 断电，rockchip_pmu_save_qos 读 qos_npu(fe180000) 寄存器 ->
+     synchronous external abort（2026082209 实测 7.8s 崩溃）。
+   - 中间版改为删 PD_NPU 域节点 + 移除两设备 power-domains：PD_NPU 永无人
+     开 -> 硬件默认关 -> NPU IOMMU(iommu@fde4b000) 读自己寄存器
+     rk_iommu_is_stall_active 直接 external abort（后续镜像实测）。
+   结论：PD_NPU 必须上电 NPU 才能用；本板 PD_NPU 在 genpd 断电流程里
+   save_qos 会 abort（板级差异），且断电会 "failed to get ack" 而保持上电
+   （域等效常开）。
+   修法：保留 PD_NPU genpd 节点 + 两设备的 power-domains（让 genpd 在
+   IOMMU/rknpu probe 时正常开域），但删掉 pm_qos——genpd 断电时
+   save_qos 无寄存器可读即不再 abort，域因断电失败而常开。 */
 
-   20260822b: 关键补漏——rk3568-npu.dtsi 里 rknpu 和 rknpu_mmu 都挂着
-   power-domains=<&power RK3568_PD_NPU>。上一轮只删了 &rknpu 的，漏了
-   &rknpu_mmu（IOMMU 节点，fde4b000）。域节点删掉后该引用悬空 →
-   rknpu_mmu 永远 probe 不起来 → rknpu 拿不到 iommu group →
-   "if (!iommu_group) return -EINVAL"（drv.c）-> error -22，且日志里
-   看到 rknpu 等 IOMMU 依赖 deferred probe timeout。这里把 rknpu_mmu 的
-   power-domains 一并删掉，IOMMU 始终上电、正常建 group，rknpu 才能过。 */
 &power {
-	/delete-node/ power-domain@RK3568_PD_NPU;
+	power-domain@RK3568_PD_NPU {
+		/delete-property/ pm_qos;
+	};
 };
 
 &bus_npu {
@@ -511,7 +515,6 @@
 };
 
 &rknpu {
-	/delete-property/ power-domains;
 	/* rk3568-npu.dtsi 的 rknpu 节点只写了 interrupts、没写 interrupt-names，
 	   而 rknpu 驱动(6.6 分支)用 platform_get_irq_byname(pdev,"npu_irq")
 	   要这个名字，缺失即 -ENXIO -> probe 失败（2026082215 实测）。补上。 */
@@ -521,7 +524,6 @@
 };
 
 &rknpu_mmu {
-	/delete-property/ power-domains;
 	status = "okay";
 };
 
