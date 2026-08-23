@@ -2,15 +2,26 @@
 # ============================================================================
 # K50S MAX fstab guard — 在 fstab init 服务之前运行，确保启动永不阻塞于 /dev/sda
 # ----------------------------------------------------------------------------
-# 根因：JMS583 USB-NVMe 桥（VID 152d PID 0583）在 M.2 不响应时 SCSI 命令 180s
-#       超时；若 /etc/config/fstab 仍把 /dev/sda 当作 essential/根设备等待，
-#       fstab init 服务会阻塞到 sda ready，导致启动被拖 10 多分钟。
+# 根因：K50S MAX 的 M.2 走 USB3.0 UAS 桥 JMS583（VID 152d PID 0583），识别为
+#       /dev/sda。当 M.2 不响应（未安装/盘故障）时，块设备节点虽被内核枚举，
+#       但任何读写都会触发 SCSI 命令 180s 超时。
 #
-# 本 init 脚本 START=05，早于 fstab(S12 左右) 执行，幂等中和 sda 启动依赖：
-#   - 所有 device 含 sda 或 target 为 /overlay 或 / 的 mount 段：enabled=0，
-#     并删除 is_rootfs。
-#   - 关闭 @extroot 与 global anon_extroot / anon_mount。
-#   - global delay_root 设为 0，防止 fstab 等待任何块设备。
+#       block-mount 在启动期的“自动挂载”由 fstab 全局开关控制：
+#         - 现代 OpenWrt/iStoreOS 真正生效的是 option auto_mount '1'（默认开）；
+#           （anon_mount 只是旧别名，部分版本默认也开）
+#       只要 auto_mount=1，fstab init 服务（block mount）就会在启动期主动探测
+#       /dev/sda 并挂载，于是卡在 180s×N 的 SCSI 超时里，启动被拖 10 多分钟。
+#
+#       另外若运行期 fstab 把 /dev/sda 配成 extroot/overlay 根（is_rootfs=1 或
+#       target=/overlay），preinit mount_root 也会等待 sda ready 而卡住。
+#
+# 本 init 脚本 START=05，早于 fstab(默认 S20 左右) 执行，幂等中和所有“启动依赖
+# M.2”的配置，使系统始终用 eMMC 内部 overlay 启动：
+#   - 所有 is_rootfs=1、或 device 含 sda、或 target 为 /overlay 或 / 的 mount 段：
+#     enabled=0 并删除 is_rootfs。
+#   - 关闭 @extroot 段。
+#   - 全局关闭 anon_extroot / anon_mount / auto_mount / anon_swap / auto_swap，
+#     并把 delay_root 设为 0（防止 fstab 等待任何块设备）。
 #
 # 仅对 roceos,k50s / roceos,k50s-max 生效。
 # ============================================================================
@@ -32,37 +43,42 @@ boot() {
 
     local changed=0
 
+    # 1) 中和任何把 /dev/sda 当作“启动根/overlay”的 mount 段，
+    #    以及任何 is_rootfs=1 的外部根（即便用 uuid/label 指定也禁用）
     for s in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@mount\[\([0-9]*\)\].*/\1/p' | sort -u); do
         local dev=$(uci -q get fstab.@mount[$s].device 2>/dev/null)
         local tgt=$(uci -q get fstab.@mount[$s].target 2>/dev/null)
-        if echo "$dev" | grep -q 'sda' || [ "$tgt" = "/overlay" ] || [ "$tgt" = "/" ]; then
+        local rootfs=$(uci -q get fstab.@mount[$s].is_rootfs 2>/dev/null)
+        if echo "$dev" | grep -q 'sda' || [ "$tgt" = "/overlay" ] || [ "$tgt" = "/" ] || [ "$rootfs" = "1" ]; then
             uci set fstab.@mount[$s].enabled='0'
             uci -q delete fstab.@mount[$s].is_rootfs
             changed=1
         fi
     done
 
+    # 2) 关闭显式 extroot 段
     for g in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@extroot\[\([0-9]*\)\].*/\1/p' | sort -u); do
         uci set fstab.@extroot[$g].enabled='0'
         changed=1
     done
 
+    # 3) 全局：关闭自动挂载/交换与外部根，等待根设备时间设为 0
+    #    auto_mount 是现代 block-mount 真正生效的启动期自动挂载开关（默认 1），
+    #    必须置 0，否则 fstab init 会在启动期探测并挂载 /dev/sda 而卡死。
+    #    anon_mount / anon_swap / auto_swap / anon_extroot 一并关闭以防版本差异。
     for gl in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@global\[\([0-9]*\)\].*/\1/p' | sort -u); do
-        if uci -q get fstab.@global[$gl].anon_extroot >/dev/null 2>&1; then
-            uci set fstab.@global[$gl].anon_extroot='0'
-            changed=1
-        fi
-        if uci -q get fstab.@global[$gl].anon_mount >/dev/null 2>&1; then
-            uci set fstab.@global[$gl].anon_mount='0'
-            changed=1
-        fi
+        uci set fstab.@global[$gl].anon_extroot='0'
+        uci set fstab.@global[$gl].anon_mount='0'
+        uci set fstab.@global[$gl].auto_mount='0'
+        uci set fstab.@global[$gl].anon_swap='0'
+        uci set fstab.@global[$gl].auto_swap='0'
         uci set fstab.@global[$gl].delay_root='0'
         changed=1
     done
 
     if [ "$changed" = "1" ]; then
         uci commit fstab
-        logger -t k50s-fstab-guard "disabled sda/overlay boot dependency and set delay_root=0"
+        logger -t k50s-fstab-guard "disabled sda/overlay/extroot boot dependency; auto_mount=0; delay_root=0"
     fi
 
     return 0
