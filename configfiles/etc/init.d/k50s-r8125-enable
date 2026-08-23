@@ -1,0 +1,46 @@
+#!/bin/sh /etc/rc.common
+# ============================================================================
+# K50S MAX r8125 驱动强制加载
+# ----------------------------------------------------------------------------
+# iStoreOS 把 r8125/r8168 当作“可选驱动”，默认不加载。K50S 3 个 2.5G
+# 网口是 RTL8125B，必须由 r8125 驱动接管；否则启动后只有 2 个 GMAC 口。
+#
+# 本脚本在 network 启动前（START=10）检查 r8125 是否已加载，若未加载则
+# 直接从 /lib/modules 中 insmod。同时把模块参数 aspm=0，避免部分 8125B
+# 在低功耗模式下掉线/协商异常。
+#
+# 仅对 roceos,k50s* 板型生效。
+# ============================================================================
+
+START=10
+
+boot() {
+    local board=""
+    if [ -r /proc/device-tree/compatible ]; then
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null)
+    fi
+    case "$board" in
+        *k50s*) ;;
+        *) return 0 ;;
+    esac
+
+    if lsmod 2>/dev/null | grep -q "^r8125 "; then
+        logger -t k50s-r8125-enable "r8125 already loaded"
+        return 0
+    fi
+
+    local ko=$(find /lib/modules -name "r8125.ko" 2>/dev/null | head -n1)
+    if [ -z "$ko" ]; then
+        logger -t k50s-r8125-enable "WARN: r8125.ko not found in /lib/modules"
+        return 0
+    fi
+
+    logger -t k50s-r8125-enable "loading $ko with aspm=0"
+    if insmod "$ko" aspm=0 2>/dev/null; then
+        logger -t k50s-r8125-enable "r8125 loaded successfully"
+    else
+        logger -t k50s-r8125-enable "WARN: insmod r8125 failed (may already be claimed by r8169)"
+    fi
+
+    return 0
+}

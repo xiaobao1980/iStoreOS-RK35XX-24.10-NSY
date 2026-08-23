@@ -23,8 +23,10 @@ bridge_deauth() {
     # 断开 JMS583 USB-UAS 桥（152d:0583），使启动期不出现 /dev/sda
     for d in /sys/bus/usb/devices/*; do
         [ -r "$d/idVendor" ] || continue
-        [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
-        [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
+        local vid=$(cat "$d/idVendor" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        local pid=$(cat "$d/idProduct" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        [ "$vid" = "152d" ] || continue
+        [ "$pid" = "0583" ] || continue
         if [ "$(cat "$d/authorized" 2>/dev/null)" != "0" ]; then
             echo 0 > "$d/authorized" 2>/dev/null
             logger -t k50s-fstab-guard "deauthorized JMS583 M.2 bridge $d during boot"

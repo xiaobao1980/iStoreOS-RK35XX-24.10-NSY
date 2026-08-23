@@ -6,13 +6,14 @@
 #       /dev/sda。M.2 不响应时块设备节点仍被枚举，但读写触发 SCSI 命令 180s 超时，
 #       累计 = 启动被拖 10+ 分钟。
 #
-# 本脚本（首次启动 uci-defaults，幂等）做两件事 + 启用两个持续生效的 init 脚本：
+# 本脚本（首次启动 uci-defaults，幂等）做三件事 + 启用三个持续生效的 init 脚本：
 #   1) 中和任何把 /dev/sda 当作“启动根”的 fstab 条目（is_rootfs=1 / target=/overlay
 #      / target=/ 或 device 含 sda）：enabled=0 并删除 is_rootfs。
 #   2) 关闭 fstab 全局 anon_extroot/anon_mount/auto_mount/anon_swap/auto_swap，
 #      把 delay_root 设为 0，确保 fstab init 不阻塞启动。
-#   3) 启用 k50s-fstab-guard（每次启动早期断开 M.2 桥，杜绝启动期 SCSI 超时）
-#      与 k50s-m2-enable（启动末重新授权桥，插着的 M.2 仍自动挂 /mnt/m2）。
+#   3) 启用 k50s-fstab-guard（每次启动早期断开 M.2 桥，杜绝启动期 SCSI 超时）、
+#      k50s-m2-enable（启动末重新授权桥 + 兜底挂载 /mnt/m2）、
+#      k50s-r8125-enable（iStoreOS 默认不加载 r8125，强制加载以启用 3 个 2.5G 网口）。
 #   M.2 的“识别与使用”运行时由 hotplug 30-m2-automount 负责（插上即挂 /mnt/m2）。
 #
 # 仅对 roceos,k50s* 生效，其它型号忽略。
@@ -65,19 +66,24 @@ done
 # 确保数据盘挂载点存在（hotplug 会用到）
 mkdir -p /mnt/m2
 
-# 启用两个持续生效的 init 脚本（每次启动都跑，无需再次首启）
+# 启用三个持续生效的 init 脚本（每次启动都跑，无需再次首启）
 if [ -x /etc/init.d/k50s-fstab-guard ]; then
     /etc/init.d/k50s-fstab-guard enable
 fi
 if [ -x /etc/init.d/k50s-m2-enable ]; then
     /etc/init.d/k50s-m2-enable enable
 fi
+if [ -x /etc/init.d/k50s-r8125-enable ]; then
+    /etc/init.d/k50s-r8125-enable enable
+fi
 
 # 首启兜底：立刻断开桥，避免本论启动就卡（guard 会在每次启动早期再做一次）
 for d in /sys/bus/usb/devices/*; do
     [ -r "$d/idVendor" ] || continue
-    [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
-    [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
+    local vid=$(cat "$d/idVendor" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    local pid=$(cat "$d/idProduct" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    [ "$vid" = "152d" ] || continue
+    [ "$pid" = "0583" ] || continue
     echo 0 > "$d/authorized" 2>/dev/null
 done
 

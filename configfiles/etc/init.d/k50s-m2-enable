@@ -1,21 +1,53 @@
 #!/bin/sh /etc/rc.common
 # ============================================================================
-# K50S MAX M.2 桥重新授权 — 启动快结束时跑（START=99）
+# K50S MAX M.2 桥重新授权 + 兜底挂载 — 启动快结束时跑（START=99）
 # ----------------------------------------------------------------------------
 # k50s-fstab-guard（START=05）在启动早期把 JMS583 USB-UAS 桥（152d:0583）
 # 断开（authorized=0），使启动期根本不创建 /dev/sda，杜绝任何 180s SCSI 超时。
 #
-# 本脚本在启动快结束时把桥重新授权（authorized=1）。内核随即重新枚举桥、
-# usb-storage 绑定、/dev/sda 出现，由 hotplug 30-m2-automount 自动挂 /mnt/m2。
+# 本脚本在启动快结束时把桥重新授权（authorized=1），并等待 /dev/sda 出现。
+# 若 hotplug 未及时挂载，则直接兜底挂载到 /mnt/m2。
 #
 # 效果：
 #   * 无 M.2  -> 桥不存在，本脚本无操作，启动已秒进。
-#   * 有 M.2  -> 启动末重新识别并自动挂载为数据盘，不阻塞启动。
+#   * 有 M.2  -> 启动末重新识别并挂载为数据盘，不阻塞启动。
 #
 # 仅对 roceos,k50s* 板型生效。
 # ============================================================================
 
 START=99
+
+M2_MP="/mnt/m2"
+
+m2_bridge_path() {
+    for d in /sys/bus/usb/devices/*; do
+        [ -r "$d/idVendor" ] || continue
+        local vid=$(cat "$d/idVendor" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        local pid=$(cat "$d/idProduct" 2>/dev/null | tr '[:upper:]' '[:lower:]')
+        [ "$vid" = "152d" ] || continue
+        [ "$pid" = "0583" ] || continue
+        echo "$d"
+        return 0
+    done
+    return 1
+}
+
+mount_m2() {
+    for dev in sda1 sda; do
+        [ -b "/dev/$dev" ] || continue
+        mountpoint -q "$M2_MP" 2>/dev/null && return 0
+        mkdir -p "$M2_MP"
+        if mount -o rw,nosuid,nodev,noexec "/dev/$dev" "$M2_MP" 2>/dev/null; then
+            logger -t k50s-m2-enable "mounted /dev/$dev -> $M2_MP"
+            return 0
+        fi
+        if mount "/dev/$dev" "$M2_MP" 2>/dev/null; then
+            logger -t k50s-m2-enable "mounted /dev/$dev -> $M2_MP (fallback opts)"
+            return 0
+        fi
+    done
+    return 1
+}
 
 boot() {
     local board=""
@@ -27,15 +59,42 @@ boot() {
         *) return 0 ;;
     esac
 
-    for d in /sys/bus/usb/devices/*; do
-        [ -r "$d/idVendor" ] || continue
-        [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
-        [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
-        if [ "$(cat "$d/authorized" 2>/dev/null)" != "1" ]; then
-            echo 1 > "$d/authorized" 2>/dev/null
-            logger -t k50s-m2-enable "re-authorized JMS583 M.2 bridge $d (auto-mount via hotplug)"
+    local bridge=$(m2_bridge_path)
+    if [ -z "$bridge" ]; then
+        logger -t k50s-m2-enable "JMS583 M.2 bridge not found, nothing to enable"
+        return 0
+    fi
+
+    # 重新授权桥；如果已经授权也再写一次，确保触发重新枚举
+    if [ "$(cat "$bridge/authorized" 2>/dev/null)" != "1" ]; then
+        echo 1 > "$bridge/authorized" 2>/dev/null
+        logger -t k50s-m2-enable "re-authorized JMS583 M.2 bridge $bridge"
+    else
+        logger -t k50s-m2-enable "JMS583 M.2 bridge $bridge already authorized, forcing rescan"
+        # 已授权但没出现设备时，尝试触发一次总线 rescan
+        echo 1 > "$bridge/authorized" 2>/dev/null
+    fi
+
+    # 等待 /dev/sda 出现（hotplug 通常会在几秒内挂载）
+    local found=0
+    for i in $(seq 1 20); do
+        if [ -b /dev/sda ] || [ -b /dev/sda1 ]; then
+            found=1
+            break
         fi
+        sleep 1
     done
+
+    if [ "$found" = "1" ]; then
+        # 若 hotplug 已挂好则不再重复；否则兜底挂载
+        if ! mountpoint -q "$M2_MP" 2>/dev/null; then
+            mount_m2
+        else
+            logger -t k50s-m2-enable "M.2 already mounted at $M2_MP by hotplug"
+        fi
+    else
+        logger -t k50s-m2-enable "WARN: /dev/sda did not appear within 20s after re-authorizing $bridge"
+    fi
 
     return 0
 }
