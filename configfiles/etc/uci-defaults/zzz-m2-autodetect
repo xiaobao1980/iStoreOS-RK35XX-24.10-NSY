@@ -1,16 +1,20 @@
 #!/bin/sh
 # ============================================================================
-# zzz-m2-autodetect  —  K50S MAX：保证拔掉 M.2 也能启动
+# zzz-m2-autodetect  —  K50S MAX：保证拔掉 M.2 也能快速启动
 # ----------------------------------------------------------------------------
 # 根因：若运行期 /etc/config/fstab 把 /dev/sda（M.2 转接 UAS 盘）配成了
 #       extroot/overlay 根（target=/overlay 且 enabled=1、is_rootfs=1），
-#       拔掉 M.2 后 preinit mount_root 找不到根设备 -> 系统无法启动。
+#       拔掉 M.2 后 preinit mount_root / fstab init 会阻塞等待 sda ready。
+#       JMS583 桥（VID 152d PID 0583）在盘不响应时 SCSI 命令 180s 超时，
+#       导致启动被拖 10 多分钟。
 #
-# 本脚本（首次启动 uci-defaults，幂等）做两件事：
+# 本脚本（首次启动 uci-defaults，幂等）做三件事：
 #   1) 中和任何把 /dev/sda 当作“启动根”的 fstab 条目：
 #      enabled=0 并删除 is_rootfs，使系统始终用 eMMC 内部 overlay 启动。
 #      -> 【有无 M.2 都能进入系统】。
-#   2) 不做任何会让启动依赖 M.2 的配置；M.2 的“识别与使用”交给
+#   2) 关闭 fstab 全局的 anon_extroot / anon_mount，并把 delay_root 设为 0，
+#      确保 fstab init 服务不会因等待 M.2 而阻塞启动。
+#   3) 不做任何会让启动依赖 M.2 的配置；M.2 的“识别与使用”交给
 #      hotplug 脚本 /etc/hotplug.d/block/30-m2-automount（插上即挂 /mnt/m2）。
 #
 # 仅对 roceos,k50s / roceos,k50s-max 生效，其它型号忽略。
@@ -46,11 +50,23 @@ for gl in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@global\[\([0-9]*\)\]
     uci set fstab.@global[$gl].anon_extroot='0'
     changed=1
   fi
+  if uci -q get fstab.@global[$gl].anon_mount >/dev/null 2>&1; then
+    uci set fstab.@global[$gl].anon_mount='0'
+    changed=1
+  fi
+  # 关键：fstab init 等待根/essential 设备的最长时间，0 表示不阻塞启动
+  uci set fstab.@global[$gl].delay_root='0'
+  changed=1
 done
 
 [ "$changed" = "1" ] && uci commit fstab
 
 # 确保数据盘挂载点存在（hotplug 会用到）
 mkdir -p /mnt/m2
+
+# 启用每次启动早期运行的 fstab guard（比 fstab init 服务更早）
+if [ -x /etc/init.d/k50s-fstab-guard ]; then
+    /etc/init.d/k50s-fstab-guard enable
+fi
 
 exit 0
