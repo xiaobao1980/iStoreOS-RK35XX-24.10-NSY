@@ -2,7 +2,9 @@ test -n "${devtype}" || setenv devtype mmc
 
 part uuid ${devtype} ${devnum}:2 uuid
 
-setenv bootargs "console=ttyS2,115200 earlycon=uart8250,mmio32,0xfe660000 root=PARTUUID=${uuid} rw rootwait"
+# M.2 槽的 240GB 盘走 JMicron JMS583 USB3.0 桥接盒，UAS 模式 Read Capacity 失败(0B)。
+# 强制走 BOT(usb-storage) 模式绕开 UAS。uas 为内置=y 无法 blacklist，靠此 quirk 让 uas probe 时主动 bailing。
+setenv bootargs "console=ttyS2,115200 earlycon=uart8250,mmio32,0xfe660000 root=PARTUUID=${uuid} rw rootwait usb-storage.quirks=152d:0583:u"
 
 load ${devtype} ${devnum}:1 ${fdt_addr_r} rockchip.dtb
 load ${devtype} ${devnum}:1 ${kernel_addr_r} kernel.img
