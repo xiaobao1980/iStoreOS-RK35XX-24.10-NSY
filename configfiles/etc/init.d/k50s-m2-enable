@@ -1,0 +1,41 @@
+#!/bin/sh /etc/rc.common
+# ============================================================================
+# K50S MAX M.2 桥重新授权 — 启动快结束时跑（START=99）
+# ----------------------------------------------------------------------------
+# k50s-fstab-guard（START=05）在启动早期把 JMS583 USB-UAS 桥（152d:0583）
+# 断开（authorized=0），使启动期根本不创建 /dev/sda，杜绝任何 180s SCSI 超时。
+#
+# 本脚本在启动快结束时把桥重新授权（authorized=1）。内核随即重新枚举桥、
+# usb-storage 绑定、/dev/sda 出现，由 hotplug 30-m2-automount 自动挂 /mnt/m2。
+#
+# 效果：
+#   * 无 M.2  -> 桥不存在，本脚本无操作，启动已秒进。
+#   * 有 M.2  -> 启动末重新识别并自动挂载为数据盘，不阻塞启动。
+#
+# 仅对 roceos,k50s* 板型生效。
+# ============================================================================
+
+START=99
+
+boot() {
+    local board=""
+    if [ -r /proc/device-tree/compatible ]; then
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null)
+    fi
+    case "$board" in
+        *k50s*) ;;
+        *) return 0 ;;
+    esac
+
+    for d in /sys/bus/usb/devices/*; do
+        [ -r "$d/idVendor" ] || continue
+        [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
+        [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
+        if [ "$(cat "$d/authorized" 2>/dev/null)" != "1" ]; then
+            echo 1 > "$d/authorized" 2>/dev/null
+            logger -t k50s-m2-enable "re-authorized JMS583 M.2 bridge $d (auto-mount via hotplug)"
+        fi
+    done
+
+    return 0
+}

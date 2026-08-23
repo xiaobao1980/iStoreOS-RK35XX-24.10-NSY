@@ -3,31 +3,29 @@
 # zzz-m2-autodetect  —  K50S MAX：保证拔掉 M.2 也能快速启动
 # ----------------------------------------------------------------------------
 # 根因：K50S MAX 的 M.2 走 USB3.0 UAS 桥 JMS583（VID 152d PID 0583），识别为
-#       /dev/sda。M.2 不响应时块设备节点仍被枚举，但读写触发 SCSI 命令 180s 超时。
+#       /dev/sda。M.2 不响应时块设备节点仍被枚举，但读写触发 SCSI 命令 180s 超时，
+#       累计 = 启动被拖 10+ 分钟。
 #
-#       block-mount 启动期自动挂载由 fstab 全局开关控制，现代 OpenWrt/iStoreOS
-#       真正生效的是 option auto_mount '1'（默认开）。auto_mount=1 时 fstab init
-#       会在启动期探测并挂载 /dev/sda，卡在 180s×N 的 SCSI 超时里，启动被拖 10+
-#       分钟。此外若 fstab 把 /dev/sda 配成 extroot/overlay 根，preinit mount_root
-#       也会等待 sda ready 而卡住。
-#
-# 本脚本（首次启动 uci-defaults，幂等）做三件事：
+# 本脚本（首次启动 uci-defaults，幂等）做两件事 + 启用两个持续生效的 init 脚本：
 #   1) 中和任何把 /dev/sda 当作“启动根”的 fstab 条目（is_rootfs=1 / target=/overlay
 #      / target=/ 或 device 含 sda）：enabled=0 并删除 is_rootfs。
-#      -> 【有无 M.2 都能进入系统】。
-#   2) 关闭 fstab 全局的 anon_extroot / anon_mount / auto_mount / anon_swap /
-#      auto_swap，并把 delay_root 设为 0，确保 fstab init 服务不会因等待/探测
-#      M.2（或任何块设备）而阻塞启动。
-#   3) 不做任何会让启动依赖 M.2 的配置；M.2 的“识别与使用”交给
-#      hotplug 脚本 /etc/hotplug.d/block/30-m2-automount（插上即挂 /mnt/m2）。
+#   2) 关闭 fstab 全局 anon_extroot/anon_mount/auto_mount/anon_swap/auto_swap，
+#      把 delay_root 设为 0，确保 fstab init 不阻塞启动。
+#   3) 启用 k50s-fstab-guard（每次启动早期断开 M.2 桥，杜绝启动期 SCSI 超时）
+#      与 k50s-m2-enable（启动末重新授权桥，插着的 M.2 仍自动挂 /mnt/m2）。
+#   M.2 的“识别与使用”运行时由 hotplug 30-m2-automount 负责（插上即挂 /mnt/m2）。
 #
-# 仅对 roceos,k50s / roceos,k50s-max 生效，其它型号忽略。
+# 仅对 roceos,k50s* 生效，其它型号忽略。
 # ============================================================================
 [ -x /sbin/uci ] || exit 0
 
 board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+# 兜底读 device-tree（首启早期 board_name 可能未生成）
+if [ -z "$board" ] && [ -r /proc/device-tree/compatible ]; then
+    board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | head -n1)
+fi
 case "$board" in
-  roceos,k50s|roceos,k50s-max) ;;
+  *k50s*) ;;
   *) exit 0 ;;
 esac
 
@@ -45,21 +43,19 @@ for s in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@mount\[\([0-9]*\)\].*
   fi
 done
 
-# 2) 关闭显式 extroot 段（避免 preinit 仍尝试外部根）
+# 2) 关闭显式 extroot 段
 for g in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@extroot\[\([0-9]*\)\].*/\1/p' | sort -u); do
   uci set fstab.@extroot[$g].enabled='0'
   changed=1
 done
 
 # 3) 全局：关闭启动期自动挂载/交换与外部根，等待根设备时间置 0
-#    auto_mount 为真正生效的自动挂载开关（默认 1），必须置 0
 for gl in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@global\[\([0-9]*\)\].*/\1/p' | sort -u); do
   uci set fstab.@global[$gl].anon_extroot='0'
   uci set fstab.@global[$gl].anon_mount='0'
   uci set fstab.@global[$gl].auto_mount='0'
   uci set fstab.@global[$gl].anon_swap='0'
   uci set fstab.@global[$gl].auto_swap='0'
-  # 关键：fstab init 等待根/essential 设备的最长时间，0 表示不阻塞启动
   uci set fstab.@global[$gl].delay_root='0'
   changed=1
 done
@@ -69,9 +65,20 @@ done
 # 确保数据盘挂载点存在（hotplug 会用到）
 mkdir -p /mnt/m2
 
-# 启用每次启动早期运行的 fstab guard（比 fstab init 服务更早）
+# 启用两个持续生效的 init 脚本（每次启动都跑，无需再次首启）
 if [ -x /etc/init.d/k50s-fstab-guard ]; then
     /etc/init.d/k50s-fstab-guard enable
 fi
+if [ -x /etc/init.d/k50s-m2-enable ]; then
+    /etc/init.d/k50s-m2-enable enable
+fi
+
+# 首启兜底：立刻断开桥，避免本论启动就卡（guard 会在每次启动早期再做一次）
+for d in /sys/bus/usb/devices/*; do
+    [ -r "$d/idVendor" ] || continue
+    [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
+    [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
+    echo 0 > "$d/authorized" 2>/dev/null
+done
 
 exit 0

@@ -10,7 +10,7 @@
 #   * 启动根【永远】是 eMMC 内部 overlay，绝不依赖 /dev/sda。
 #     因此【有无 M.2 都能正常进入系统】。
 #   * 本脚本只负责“识别到 M.2 时把它当数据盘用”，与启动无关。
-#   * 仅对 roceos,k50s / roceos,k50s-max 板型生效，其它型号忽略。
+#   * 仅对 roceos,k50s* 板型生效，其它型号忽略。
 #
 # 若希望 M.2 作为根分区(extroot)，那是另一个可选功能，需额外启用
 # block-mount + preinit 钩子，默认不开启以避免启动风险。
@@ -22,7 +22,7 @@
 # 板型守卫：仅 K50S / K50S MAX
 board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
 case "$board" in
-  roceos,k50s|roceos,k50s-max) ;;
+  *k50s*) ;;
   *) exit 0 ;;
 esac
 

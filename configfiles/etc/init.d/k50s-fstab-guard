@@ -4,42 +4,46 @@
 # ----------------------------------------------------------------------------
 # 根因：K50S MAX 的 M.2 走 USB3.0 UAS 桥 JMS583（VID 152d PID 0583），识别为
 #       /dev/sda。当 M.2 不响应（未安装/盘故障）时，块设备节点虽被内核枚举，
-#       但任何读写都会触发 SCSI 命令 180s 超时。
+#       但任何对其的读写都会触发 SCSI 命令 180s 超时，累计 = 启动被拖 10+ 分钟。
 #
-#       block-mount 在启动期的“自动挂载”由 fstab 全局开关控制：
-#         - 现代 OpenWrt/iStoreOS 真正生效的是 option auto_mount '1'（默认开）；
-#           （anon_mount 只是旧别名，部分版本默认也开）
-#       只要 auto_mount=1，fstab init 服务（block mount）就会在启动期主动探测
-#       /dev/sda 并挂载，于是卡在 180s×N 的 SCSI 超时里，启动被拖 10 多分钟。
+# 本 init 脚本 START=05，早于 fstab(默认 S20 左右) 执行，做两层防御：
+#   第 1 层（fstab 中和）：禁用所有“启动依赖 M.2”的 fstab 条目，并关闭
+#     auto_mount/anon_mount/auto_swap/anon_swap/anon_extroot，delay_root=0。
+#   第 2 层（硬断开，关键）：在启动早期把 JMS583 桥直接 authorized=0 断开，
+#     让内核在启动期根本不创建 /dev/sda，从而任何服务（fstab/hotplug/别的）
+#     都不可能对其发 SCSI 命令而 180s 超时。桥在启动快结束时由
+#     k50s-m2-enable（START=99）重新授权，插着的 M.2 仍由 hotplug 自动挂 /mnt/m2。
 #
-#       另外若运行期 fstab 把 /dev/sda 配成 extroot/overlay 根（is_rootfs=1 或
-#       target=/overlay），preinit mount_root 也会等待 sda ready 而卡住。
-#
-# 本 init 脚本 START=05，早于 fstab(默认 S20 左右) 执行，幂等中和所有“启动依赖
-# M.2”的配置，使系统始终用 eMMC 内部 overlay 启动：
-#   - 所有 is_rootfs=1、或 device 含 sda、或 target 为 /overlay 或 / 的 mount 段：
-#     enabled=0 并删除 is_rootfs。
-#   - 关闭 @extroot 段。
-#   - 全局关闭 anon_extroot / anon_mount / auto_mount / anon_swap / auto_swap，
-#     并把 delay_root 设为 0（防止 fstab 等待任何块设备）。
-#
-# 仅对 roceos,k50s / roceos,k50s-max 生效。
+# 仅对 roceos,k50s* 板型生效。
 # ============================================================================
 
 START=05
 
+bridge_deauth() {
+    # 断开 JMS583 USB-UAS 桥（152d:0583），使启动期不出现 /dev/sda
+    for d in /sys/bus/usb/devices/*; do
+        [ -r "$d/idVendor" ] || continue
+        [ "$(cat "$d/idVendor" 2>/dev/null)" = "152d" ] || continue
+        [ "$(cat "$d/idProduct" 2>/dev/null)" = "0583" ] || continue
+        if [ "$(cat "$d/authorized" 2>/dev/null)" != "0" ]; then
+            echo 0 > "$d/authorized" 2>/dev/null
+            logger -t k50s-fstab-guard "deauthorized JMS583 M.2 bridge $d during boot"
+        fi
+    done
+}
+
 boot() {
-    # 早期 /tmp/sysinfo/board_name 可能还没生成，读 device-tree 兼容串
+    # 早期 /tmp/sysinfo/board_name 可能还没生成，读 device-tree 兼容串（全部条目）
     local board=""
     if [ -r /proc/device-tree/compatible ]; then
-        board=$(tr '\0' '\n' < /proc/device-tree/compatible | head -n1)
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null)
     fi
     case "$board" in
-        roceos,k50s|roceos,k50s-max) ;;
+        *k50s*) ;;
         *) return 0 ;;
     esac
 
-    [ -x /sbin/uci ] || return 0
+    [ -x /sbin/uci ] || { bridge_deauth; return 0; }
 
     local changed=0
 
@@ -65,7 +69,6 @@ boot() {
     # 3) 全局：关闭自动挂载/交换与外部根，等待根设备时间设为 0
     #    auto_mount 是现代 block-mount 真正生效的启动期自动挂载开关（默认 1），
     #    必须置 0，否则 fstab init 会在启动期探测并挂载 /dev/sda 而卡死。
-    #    anon_mount / anon_swap / auto_swap / anon_extroot 一并关闭以防版本差异。
     for gl in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@global\[\([0-9]*\)\].*/\1/p' | sort -u); do
         uci set fstab.@global[$gl].anon_extroot='0'
         uci set fstab.@global[$gl].anon_mount='0'
@@ -77,9 +80,12 @@ boot() {
     done
 
     if [ "$changed" = "1" ]; then
-        uci commit fstab
-        logger -t k50s-fstab-guard "disabled sda/overlay/extroot boot dependency; auto_mount=0; delay_root=0"
+        uci commit fstab 2>/dev/null
     fi
 
+    # 第 2 层硬防御：断开桥，杜绝启动期 SCSI 超时
+    bridge_deauth
+
+    logger -t k50s-fstab-guard "fstab neutralized; M.2 bridge deauthorized for fast boot (re-enabled at START=99)"
     return 0
 }
