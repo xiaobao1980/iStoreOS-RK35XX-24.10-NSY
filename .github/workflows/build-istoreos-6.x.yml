@@ -145,6 +145,29 @@ jobs:
       run: |
         [ -e files ] && mv files openwrt/files
         [ -e $CONFIG_FILE_PATH ] && mv $CONFIG_FILE_PATH openwrt/$CONFIG_FILE
+        # 按当前分支名只构建本分支机型，避免 release 中出现其它型号固件
+        BRANCH="${GITHUB_REF_NAME}"
+        case "$BRANCH" in
+          k50s-max)
+            KEEP_DEVICES='roceos_k50s|roceos_k50s_max'
+            ;;
+          lubancat-2n)
+            KEEP_DEVICES='lubancat_2n'
+            ;;
+          *)
+            KEEP_DEVICES=''
+            echo "==> 分支 $BRANCH 未配置机型过滤，继续构建 .config 中所有设备"
+            ;;
+        esac
+        if [ -n "$KEEP_DEVICES" ]; then
+          if grep -qE "CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_($KEEP_DEVICES)=y" openwrt/.config; then
+            echo "==> 分支 $BRANCH 仅构建以下机型: $KEEP_DEVICES"
+            sed -i -E 's/^(CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_[_a-zA-Z0-9-]+)=y$/# \1 is not set/' openwrt/.config
+            sed -i -E "s/^# (CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_($KEEP_DEVICES)) is not set$/\1=y/" openwrt/.config
+          else
+            echo "==> WARNING: 分支 $BRANCH 在 .config 中没有匹配机型，保留原有配置"
+          fi
+        fi
         chmod +x $DIY_P2_SH
         cd openwrt
         $GITHUB_WORKSPACE/$DIY_P2_SH

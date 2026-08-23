@@ -138,6 +138,24 @@ jobs:
         sed -i -E 's/^(CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_[_a-zA-Z0-9-]+)=y$/# \1 is not set/' openwrt/.config
         getconfig=$(cat ${GITHUB_WORKSPACE}/armv8/g68_mtk_wifi.config)
         echo "$getconfig" >> openwrt/.config
+        # 按当前分支名过滤 MTK 机型；未配置分支保持现有行为（继续构建默认 g68）
+        BRANCH="${GITHUB_REF_NAME}"
+        case "$BRANCH" in
+          nsy-g68|g68)
+            KEEP_DEVICES='nsy_g68-plus'
+            ;;
+          *)
+            KEEP_DEVICES=''
+            echo "==> WARNING: 分支 $BRANCH 不是已配置 MTK 机型分支，MTK workflow 仍会构建默认的 nsy_g68-plus"
+            ;;
+        esac
+        if [ -n "$KEEP_DEVICES" ]; then
+          if grep -qE "CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_($KEEP_DEVICES)=y" openwrt/.config; then
+            echo "==> 分支 $BRANCH 仅构建 MTK 机型: $KEEP_DEVICES"
+            sed -i -E 's/^(CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_[_a-zA-Z0-9-]+)=y$/# \1 is not set/' openwrt/.config
+            sed -i -E "s/^# (CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_($KEEP_DEVICES)) is not set$/\1=y/" openwrt/.config
+          fi
+        fi
         # cat openwrt/.config
         chmod +x $DIY_P2_SH
         cd openwrt
