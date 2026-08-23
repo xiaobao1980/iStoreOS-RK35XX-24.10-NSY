@@ -1,0 +1,56 @@
+#!/bin/sh
+# ============================================================================
+# zzz-m2-autodetect  —  K50S MAX：保证拔掉 M.2 也能启动
+# ----------------------------------------------------------------------------
+# 根因：若运行期 /etc/config/fstab 把 /dev/sda（M.2 转接 UAS 盘）配成了
+#       extroot/overlay 根（target=/overlay 且 enabled=1、is_rootfs=1），
+#       拔掉 M.2 后 preinit mount_root 找不到根设备 -> 系统无法启动。
+#
+# 本脚本（首次启动 uci-defaults，幂等）做两件事：
+#   1) 中和任何把 /dev/sda 当作“启动根”的 fstab 条目：
+#      enabled=0 并删除 is_rootfs，使系统始终用 eMMC 内部 overlay 启动。
+#      -> 【有无 M.2 都能进入系统】。
+#   2) 不做任何会让启动依赖 M.2 的配置；M.2 的“识别与使用”交给
+#      hotplug 脚本 /etc/hotplug.d/block/30-m2-automount（插上即挂 /mnt/m2）。
+#
+# 仅对 roceos,k50s / roceos,k50s-max 生效，其它型号忽略。
+# ============================================================================
+[ -x /sbin/uci ] || exit 0
+
+board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+case "$board" in
+  roceos,k50s|roceos,k50s-max) ;;
+  *) exit 0 ;;
+esac
+
+changed=0
+
+# 1) 中和所有“启动依赖 M.2”的 mount 段
+for s in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@mount\[\([0-9]*\)\].*/\1/p' | sort -u); do
+  dev=$(uci -q get fstab.@mount[$s].device 2>/dev/null)
+  tgt=$(uci -q get fstab.@mount[$s].target 2>/dev/null)
+  if echo "$dev" | grep -q 'sda' || [ "$tgt" = "/overlay" ] || [ "$tgt" = "/" ]; then
+    uci set fstab.@mount[$s].enabled='0'
+    uci -q delete fstab.@mount[$s].is_rootfs
+    changed=1
+  fi
+done
+
+# 2) 关闭显式 extroot 段与 anon_extroot（避免 preinit 仍尝试外部根）
+for g in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@extroot\[\([0-9]*\)\].*/\1/p' | sort -u); do
+  uci set fstab.@extroot[$g].enabled='0'
+  changed=1
+done
+for gl in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@global\[\([0-9]*\)\].*/\1/p' | sort -u); do
+  if uci -q get fstab.@global[$gl].anon_extroot >/dev/null 2>&1; then
+    uci set fstab.@global[$gl].anon_extroot='0'
+    changed=1
+  fi
+done
+
+[ "$changed" = "1" ] && uci commit fstab
+
+# 确保数据盘挂载点存在（hotplug 会用到）
+mkdir -p /mnt/m2
+
+exit 0

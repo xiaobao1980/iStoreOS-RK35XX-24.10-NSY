@@ -1,0 +1,69 @@
+#!/bin/sh
+# ============================================================================
+# 30-m2-automount  —  K50S MAX M.2 自动挂载（数据盘）
+# ----------------------------------------------------------------------------
+# K50S MAX 的 M.2 槽走 USB3.0 UAS，识别为 /dev/sda（非 NVMe/SATA，
+# 见 rk3568-roceos-k50s.dtsi 注释）。本脚本在 U 盘/硬盘插入时自动把它
+# 挂载为数据盘 /mnt/m2，拔出时自动卸载。
+#
+# 设计原则（关键）：
+#   * 启动根【永远】是 eMMC 内部 overlay，绝不依赖 /dev/sda。
+#     因此【有无 M.2 都能正常进入系统】。
+#   * 本脚本只负责“识别到 M.2 时把它当数据盘用”，与启动无关。
+#   * 仅对 roceos,k50s / roceos,k50s-max 板型生效，其它型号忽略。
+#
+# 若希望 M.2 作为根分区(extroot)，那是另一个可选功能，需额外启用
+# block-mount + preinit 钩子，默认不开启以避免启动风险。
+# ============================================================================
+
+# 仅处理 block 子系统
+[ "$SUBSYSTEM" = "block" ] || exit 0
+
+# 板型守卫：仅 K50S / K50S MAX
+board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+case "$board" in
+  roceos,k50s|roceos,k50s-max) ;;
+  *) exit 0 ;;
+esac
+
+MP="/mnt/m2"
+
+mount_m2() {
+  # 优先挂载分区 sda1；若整盘无分区(整盘格式化)则退回挂载 sda
+  for d in sda1 sda; do
+    [ -b "/dev/$d" ] || continue
+    mountpoint -q "$MP" 2>/dev/null && break
+    mkdir -p "$MP"
+    if mount -o rw,nosuid,nodev,noexec "/dev/$d" "$MP" 2>/dev/null; then
+      logger -t m2-automount "mounted /dev/$d -> $MP"
+      return 0
+    fi
+    # 某些文件系统需要不指定选项再试一次
+    if mount "/dev/$d" "$MP" 2>/dev/null; then
+      logger -t m2-automount "mounted /dev/$d -> $MP (fallback opts)"
+      return 0
+    fi
+  done
+  return 1
+}
+
+umount_m2() {
+  if mountpoint -q "$MP" 2>/dev/null; then
+    umount -l "$MP" 2>/dev/null && logger -t m2-automount "unmounted $MP"
+  fi
+}
+
+case "$ACTION" in
+  add)
+    # 设备节点可能稍晚出现，给一点重试窗口
+    for i in 1 2 3 4 5; do
+      mount_m2 && break
+      sleep 1
+    done
+    ;;
+  remove)
+    umount_m2
+    ;;
+esac
+
+exit 0
