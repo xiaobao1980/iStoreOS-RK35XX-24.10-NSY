@@ -1,0 +1,18 @@
+#!/bin/sh
+# 防御：禁止把 /dev/sda（K50S MAX 的 M.2 转接 UAS 盘）配置为 extroot/overlay 根。
+# 否则拔掉 M.2 后 preinit mount_root 找不到根设备，系统无法启动。
+# 仅在首次启动（uci-defaults）运行一次；幂等，可安全保留。
+[ -x /sbin/uci ] || exit 0
+
+changed=0
+for s in $(uci show fstab 2>/dev/null | sed -n 's/^fstab\.@mount\[\([0-9]*\)\].*/\1/p' | sort -u); do
+    dev=$(uci -q get fstab.@mount[$s].device 2>/dev/null)
+    tgt=$(uci -q get fstab.@mount[$s].target 2>/dev/null)
+    if echo "$dev" | grep -q 'sda' || [ "$tgt" = "/overlay" ] || [ "$tgt" = "/" ]; then
+        uci set fstab.@mount[$s].enabled='0'
+        uci -q delete fstab.@mount[$s].is_rootfs
+        changed=1
+    fi
+done
+[ "$changed" = "1" ] && uci commit fstab
+exit 0
