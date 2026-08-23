@@ -231,3 +231,52 @@ done
 echo "==> .config 已更新 (ROCEOS K50S / K50S MAX)"
 
 echo "==================== ROCEOS K50S / K50S MAX 适配完成 ===================="
+
+# ============================================================
+# EmbedFire LubanCat 2N 适配 (RK3568 / RK809 PMIC / UART2@1.5M)
+# 参考上游 LubanCatWrt (github.com/LubanCat/LubanCatWrt, v24.10 分支)
+# rk3568-lubancat-2n.dts。硬件：2x GMAC(RK 内置 1G) + 2x RTL8125(PCIe 2.5G)
+# + 板载 SATA0 + mini-PCIe(pcie2x1) + USB3.0 + HDMI in/out。
+# 调试串口为 UART2 @ 1.5M（iStoreOS rk3568 默认波特率），故复用标准
+# easepi-rk3568-rk809 U-Boot，无需另做 115200 变体；bootscript 也用 1500000。
+# DTS 由上面的通用 cp 已进内核树，这里只补 bootscript 复制与 legacy.mk 设备定义。
+# ============================================================
+echo "==================== EmbedFire LubanCat 2N 适配开始 ===================="
+
+MK_FILE="target/linux/rockchip/image/legacy.mk"
+
+# --- 复制 LubanCat 2N 专用 1500000 bootscript ---
+if [ -f "$GITHUB_WORKSPACE/configfiles/bootscript/rk3568-lubancat-2n.bootscript" ]; then
+	cp -f "$GITHUB_WORKSPACE/configfiles/bootscript/rk3568-lubancat-2n.bootscript" target/linux/rockchip/image/legacy/
+	echo "==> bootscript rk3568-lubancat-2n 已复制"
+fi
+
+# --- legacy.mk 追加 LubanCat 2N 设备定义 ---
+if [ -f "${MK_FILE}" ]; then
+	sed -i '/^define Device\/embedfire_lubancat-2n$/,/^TARGET_DEVICES += embedfire_lubancat-2n$/d' "${MK_FILE}"
+
+	cat >> "${MK_FILE}" << 'MK_EOF'
+
+define Device/embedfire_lubancat-2n
+  $(call Device/Legacy/rk3568,$(1))
+  DEVICE_VENDOR := EmbedFire
+  DEVICE_MODEL := LubanCat-2N
+  DEVICE_DTS := rk3568/rk3568-lubancat-2n
+  UBOOT_DEVICE_NAME := easepi-rk3568-rk809
+  BOOT_SCRIPT := rk3568-lubancat-2n
+  DEVICE_PACKAGES += kmod-r8125 kmod-thermal kmod-hwmon-pwmfan kmod-usb-storage kmod-usb-storage-uas kmod-nvme kmod-ata-ahci kmod-brcmfmac brcmfmac-firmware-43455-sdio wpad-basic-mbedtls
+endef
+TARGET_DEVICES += embedfire_lubancat-2n
+MK_EOF
+	echo "==> legacy.mk 已追加 LubanCat 2N 设备定义"
+else
+	echo "警告: 未找到 ${MK_FILE}，跳过设备定义追加"
+fi
+
+# --- .config 追加设备选择 ---
+if ! grep -q "^CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_embedfire_lubancat_2n=y" .config 2>/dev/null; then
+	echo "CONFIG_TARGET_DEVICE_rockchip_armv8_DEVICE_embedfire_lubancat_2n=y" >> .config
+fi
+echo "==> .config 已更新 (LubanCat 2N)"
+
+echo "==================== EmbedFire LubanCat 2N 适配完成 ===================="

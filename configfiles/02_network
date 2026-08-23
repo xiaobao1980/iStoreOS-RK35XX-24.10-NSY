@@ -79,6 +79,13 @@ rockchip_setup_interfaces()
 		#   eth4 = gmac0   (fe2a0000.ethernet) -> WAN
 		ucidef_set_interfaces_lan_wan 'eth0 eth1 eth2 eth3' 'eth4'
 		;;
+	embedfire,lubancat2n)
+		# LubanCat 2N = 2x GMAC (RK 内置 1G) + 2x RTL8125 (PCIe 2.5G)，无交换芯片。
+		# 接口名由 DTS label 固定：eth0=gmac0, eth1=gmac1,
+		# eth2=rtl8125_2(pcie3x2), eth3=rtl8125_1(pcie3x1)。
+		# 默认 WAN=eth0(gmac0)，LAN=eth1+eth2+eth3（可按需调换）。
+		ucidef_set_interfaces_lan_wan 'eth1 eth2 eth3' 'eth0'
+		;;
 	easepi,r1|easepi,r1-lite|\
 	linkease,easepi-r1)
 		ucidef_set_network_device_path eth2 'platform/3c0400000.pcie/pci0001:10/0001:10:00.0/0001:11:00.0'
@@ -147,6 +154,11 @@ rockchip_setup_macs()
 	roceos,k50s-max)
 		# 20260821: 自动探测启动盘（K50S=SD/mmcblk0, K50S MAX=eMMC/mmcblk1），
 		# 原硬编码 mmcblk0 在 MAX 上读不到 cid 导致 wan/lan MAC 不生成
+		wan_mac=$(generate_mac_from_boot_mmc)
+		lan_mac=$(macaddr_add "$wan_mac" 1)
+		;;
+	embedfire,lubancat2n)
+		# 自动探测启动盘（eMMC/mmcblk1 或 SD/mmcblk0）生成 MAC
 		wan_mac=$(generate_mac_from_boot_mmc)
 		lan_mac=$(macaddr_add "$wan_mac" 1)
 		;;

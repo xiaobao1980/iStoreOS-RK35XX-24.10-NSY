@@ -45,6 +45,20 @@ pcie_lane1_rescan() {
             logger -t pcie-rescan "lane1 RTL8125 0001:11:00.0 present after ${i} rescans"
             ) &
             ;;
+        embedfire,lubancat2n)
+            # 2x RTL8125 (pcie3x1 / pcie3x2) 链路训练兜底；通用 rescan，
+            # 出现任一 8125 即停（BDF 随枚举顺序变化，不写死）。
+            (
+            i=0
+            while [ $i -lt 30 ]; do
+                ls /sys/bus/pci/devices/ 2>/dev/null | grep -qi '8125' && break
+                echo 1 > /sys/bus/pci/rescan
+                i=$((i+1))
+                sleep 2
+            done
+            logger -t pcie-rescan "LubanCat2N RTL8125 present after ${i} rescans"
+            ) &
+            ;;
     esac
 }
 
