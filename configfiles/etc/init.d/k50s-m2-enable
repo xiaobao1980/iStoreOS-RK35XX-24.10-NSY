@@ -1,21 +1,22 @@
 #!/bin/sh /etc/rc.common
 # ============================================================================
-# K50S MAX M.2 桥重新授权 + 兜底挂载 — 启动快结束时跑（START=99）
+# K50S MAX M.2 桥重新授权 + 兜底挂载 — 启动中早段跑（START=26）
 # ----------------------------------------------------------------------------
 # k50s-fstab-guard（START=05）在启动早期把 JMS583 USB-UAS 桥（152d:0583）
 # 断开（authorized=0），使启动期根本不创建 /dev/sda，杜绝任何 180s SCSI 超时。
 #
-# 本脚本在启动快结束时把桥重新授权（authorized=1），并等待 /dev/sda 出现。
-# 若 hotplug 未及时挂载，则直接兜底挂载到 /mnt/m2。
+# 本脚本在启动中早段（START=26，晚于 fstab/overlay 挂载）把桥重新授权
+# （authorized=1），并等待 /dev/sda 出现。若 hotplug 未及时挂载，则直接兜底
+# 挂载到 /mnt/m2。
 #
 # 效果：
 #   * 无 M.2  -> 桥不存在，本脚本无操作，启动已秒进。
-#   * 有 M.2  -> 启动末重新识别并挂载为数据盘，不阻塞启动。
+#   * 有 M.2  -> 启动中早段重新识别并挂载为数据盘，不阻塞启动。
 #
 # 仅对 roceos,k50s* 板型生效。
 # ============================================================================
 
-START=99
+START=26
 
 M2_MP="/mnt/m2"
 
@@ -65,36 +66,36 @@ boot() {
         return 0
     fi
 
-    # 重新授权桥；如果已经授权也再写一次，确保触发重新枚举
-    if [ "$(cat "$bridge/authorized" 2>/dev/null)" != "1" ]; then
-        echo 1 > "$bridge/authorized" 2>/dev/null
-        logger -t k50s-m2-enable "re-authorized JMS583 M.2 bridge $bridge"
-    else
-        logger -t k50s-m2-enable "JMS583 M.2 bridge $bridge already authorized, forcing rescan"
-        # 已授权但没出现设备时，尝试触发一次总线 rescan
-        echo 1 > "$bridge/authorized" 2>/dev/null
-    fi
-
-    # 等待 /dev/sda 出现（hotplug 通常会在几秒内挂载）
-    local found=0
-    for i in $(seq 1 20); do
-        if [ -b /dev/sda ] || [ -b /dev/sda1 ]; then
-            found=1
-            break
-        fi
-        sleep 1
-    done
-
-    if [ "$found" = "1" ]; then
-        # 若 hotplug 已挂好则不再重复；否则兜底挂载
-        if ! mountpoint -q "$M2_MP" 2>/dev/null; then
-            mount_m2
+    # 重活在后台：过启动早期关键阶段（fstab/overlay 已挂载）后再重新授权
+    (
+        sleep 10
+        if [ "$(cat "$bridge/authorized" 2>/dev/null)" != "1" ]; then
+            echo 1 > "$bridge/authorized" 2>/dev/null
+            logger -t k50s-m2-enable "re-authorized JMS583 M.2 bridge $bridge"
         else
-            logger -t k50s-m2-enable "M.2 already mounted at $M2_MP by hotplug"
+            logger -t k50s-m2-enable "JMS583 M.2 bridge $bridge already authorized, forcing rescan"
+            echo 1 > "$bridge/authorized" 2>/dev/null
         fi
-    else
-        logger -t k50s-m2-enable "WARN: /dev/sda did not appear within 20s after re-authorizing $bridge"
-    fi
+
+        local found=0
+        for i in $(seq 1 20); do
+            if [ -b /dev/sda ] || [ -b /dev/sda1 ]; then
+                found=1
+                break
+            fi
+            sleep 1
+        done
+
+        if [ "$found" = "1" ]; then
+            if ! mountpoint -q "$M2_MP" 2>/dev/null; then
+                mount_m2
+            else
+                logger -t k50s-m2-enable "M.2 already mounted at $M2_MP by hotplug"
+            fi
+        else
+            logger -t k50s-m2-enable "WARN: /dev/sda did not appear within 20s after re-authorizing $bridge"
+        fi
+    ) &
 
     return 0
 }

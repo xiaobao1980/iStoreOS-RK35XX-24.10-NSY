@@ -1,22 +1,21 @@
 #!/bin/sh /etc/rc.common
 # ============================================================================
-# K50S MAX r8125 驱动强制加载（启动末，绕过 iStoreOS disable_kmod）
+# K50S MAX r8125 驱动强制加载（启动中早段，绕过 iStoreOS disable_kmod）
 # ----------------------------------------------------------------------------
 # iStoreOS 把 r8125/r8168 当作“可选驱动”，默认不加载，并在启动中通过
-# disable_kmod 机制卸载已加载的 r8125。K50S 3 个 2.5G 网口是 RTL8125B，
-# 必须由 r8125 驱动接管；否则启动后只有 2 个 GMAC 口。
+# disable_kmod 机制卸载已加载的 r8125（约第 23 秒）。K50S 3 个 2.5G 网口是
+# RTL8125B，必须由 r8125 驱动接管；否则启动后只有 2 个 GMAC 口。
 #
-# 本脚本在启动快结束时（START=99）检查 r8125 是否已加载，若未加载则
-# 直接从 /lib/modules 中 insmod。同时把模块参数 aspm=0，避免部分 8125B
-# 在低功耗模式下掉线/协商异常。
-#
-# 加载成功后，在后台等待 eth0/eth1/eth2 出现并重启 network，使 netifd
-# 重新识别 2.5G 接口。
+# 本脚本在启动中早段（START=25，晚于 disable_kmod(23s) 与 kmodloader(27s)）
+# 直接从 /lib/modules 中 insmod r8125（insmod 不走 modprobe 黑名单，可绕过
+# disable_kmod 的黑名单）。加载成功后，在后台等待 eth0/eth1/eth2 出现、并等
+# GMAC 重命名（eth3 出现）完成后重启 network，让 netifd 识别 2.5G 接口。
+# 另起守护循环：若 r8125 被后续清理移除而 PCI 设备仍在，则自动重新加载。
 #
 # 仅对 roceos,k50s* 板型生效。
 # ============================================================================
 
-START=99
+START=25
 
 boot() {
     local board=""
@@ -45,16 +44,34 @@ boot() {
         return 0
     fi
 
-    logger -t k50s-r8125-enable "r8125 loaded successfully, will restart network once interfaces appear"
+    logger -t k50s-r8125-enable "r8125 loaded successfully, configuring ports in background"
 
-    # 后台等待接口出现，然后重启 network，避免阻塞 boot 末段
+    # 所有重活放进后台，boot() 立即返回，不阻塞开机
     (
+        # 等待 2.5G 口（eth0/eth1/eth2）出现
         for i in $(seq 1 15); do
             [ -d /sys/class/net/eth0 ] && [ -d /sys/class/net/eth1 ] && [ -d /sys/class/net/eth2 ] && break
             sleep 1
         done
-        logger -t k50s-r8125-enable "restarting network after r8125 load"
+        # 再等 GMAC 重命名完成（eth3 出现），避免 network restart 与重命名竞争
+        for i in $(seq 1 20); do
+            [ -d /sys/class/net/eth3 ] && break
+            sleep 1
+        done
+        logger -t k50s-r8125-enable "restarting network to pick up 2.5G ports"
         /etc/init.d/network restart
+
+        # 守护：若 r8125 被后续清理移除且 PCI 设备仍在，则重新加载
+        while true; do
+            sleep 30
+            if [ -d /sys/bus/pci/devices/0000:01:00.0 ] && ! lsmod 2>/dev/null | grep -q "^r8125 "; then
+                local k=$(find /lib/modules -name "r8125.ko" 2>/dev/null | head -n1)
+                if [ -n "$k" ] && insmod "$k" aspm=0 2>/dev/null; then
+                    logger -t k50s-r8125-enable "re-loaded r8125 (watchdog)"
+                    /etc/init.d/network restart
+                fi
+            fi
+        done
     ) &
 
     return 0
