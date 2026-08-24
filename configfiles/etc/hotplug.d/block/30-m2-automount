@@ -19,8 +19,12 @@
 # 仅处理 block 子系统
 [ "$SUBSYSTEM" = "block" ] || exit 0
 
-# 板型守卫：仅 K50S / K50S MAX
-board=$(cat /tmp/sysinfo/board_name 2>/dev/null)
+# 板型守卫：仅 K50S / K50S MAX（大小写不敏感）
+board=$(cat /tmp/sysinfo/board_name 2>/dev/null | tr '[:upper:]' '[:lower:]')
+# 首启早期 board_name 可能未生成，兜底读 device-tree
+if [ -z "$board" ] && [ -r /proc/device-tree/compatible ]; then
+    board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | head -n1 | tr '[:upper:]' '[:lower:]')
+fi
 case "$board" in
   *k50s*) ;;
   *) exit 0 ;;

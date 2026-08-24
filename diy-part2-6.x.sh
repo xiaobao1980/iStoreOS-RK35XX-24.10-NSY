@@ -29,6 +29,16 @@ sed -i "s/:443/:4443/g" package/network/services/uhttpd/files/uhttpd.config
 cp -a $GITHUB_WORKSPACE/configfiles/etc/* package/base-files/files/etc/
 # ls package/base-files/files/etc/
 
+# K50S MAX init 脚本强制启用：避免 sysupgrade 保留配置时 /etc/rc.d/ 没同步
+# 导致 k50s-r8125-enable / k50s-m2-enable 不执行
+mkdir -p package/base-files/files/etc/rc.d
+for script in k50s-fstab-guard k50s-r8125-enable k50s-m2-enable; do
+    [ -x "package/base-files/files/etc/init.d/$script" ] || continue
+    start=$(sed -n 's/^START=\([0-9]*\).*/\1/p' package/base-files/files/etc/init.d/$script | head -n1)
+    [ -n "$start" ] || continue
+    ln -sf "../init.d/$script" "package/base-files/files/etc/rc.d/S${start}${script}"
+done
+
 
 # 追加自定义内核配置项
 echo "CONFIG_PSI=y

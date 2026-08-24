@@ -38,7 +38,7 @@ boot() {
     # 早期 /tmp/sysinfo/board_name 可能还没生成，读 device-tree 兼容串（全部条目）
     local board=""
     if [ -r /proc/device-tree/compatible ]; then
-        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null)
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | tr '[:upper:]' '[:lower:]')
     fi
     case "$board" in
         *k50s*) ;;

@@ -52,7 +52,7 @@ mount_m2() {
 boot() {
     local board=""
     if [ -r /proc/device-tree/compatible ]; then
-        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null)
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | tr '[:upper:]' '[:lower:]')
     fi
     case "$board" in
         *k50s*) ;;
