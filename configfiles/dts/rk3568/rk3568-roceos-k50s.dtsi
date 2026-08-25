@@ -412,7 +412,15 @@
 			rockchip,pins = <0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_up>;
 		};
 		soc_slppin_gpio: soc_slppin_gpio {
-			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_output_low>;
+			/*
+			 * 20260825: 关机变重启修复。
+			 * BSP rk808.c 的 rk817_shutdown_prepare() 在关机时硬设
+			 * RK817_SLPPOL_H（SLPPIN 高电平有效），并把 SLPPIN 功能切到
+			 * SLPPIN_DN_FUN（掉电）。此处必须把 SoC 的 SLPPIN(GPIO0_A2)
+			 * 在 power-off 态驱动成 高电平，PMIC 才会真正切电。
+			 * 原 output_low 与 SLPPOL_H 极性相反 -> 断电触发不到 -> 重启。
+			 */
+			rockchip,pins = <0 RK_PA2 RK_FUNC_GPIO &pcfg_output_high>;
 		};
 		soc_slppin_slp: soc_slppin_slp {
 			rockchip,pins = <0 RK_PA2 1 &pcfg_pull_up>;
