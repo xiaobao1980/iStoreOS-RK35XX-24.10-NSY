@@ -250,4 +250,12 @@ ln -sf brcmfmac43455-sdio.bin package/base-files/files/lib/firmware/brcm/brcmfma
 ln -sf brcmfmac43455-sdio.clm_blob package/base-files/files/lib/firmware/brcm/brcmfmac43455-sdio.roceos,k50s-max.clm_blob
 echo "==> 已预建 brcmfmac 板型专属固件软链 (roceos,k50s-max)"
 
+# 板型专属 nvram（AP6255 / BCM43455 射频校准参数，取自 Armbian）
+# 文件名须为 brcmfmac43455-sdio.roceos,k50s-max.txt，brcmfmac 据此请求板级 nvram。
+# 已剔除 macaddr 行，改用模块 OTP 出厂唯一 MAC，避免多机同 MAC 冲突。
+if [ -f "$GITHUB_WORKSPACE/configfiles/lib/firmware/brcm/brcmfmac43455-sdio.roceos,k50s-max.txt" ]; then
+	cp -f "$GITHUB_WORKSPACE/configfiles/lib/firmware/brcm/brcmfmac43455-sdio.roceos,k50s-max.txt" package/base-files/files/lib/firmware/brcm/
+	echo "==> 已烘焙 brcmfmac 板型专属 nvram (roceos,k50s-max.txt)"
+fi
+
 echo "==================== ROCEOS K50S / K50S MAX 适配完成 ===================="
