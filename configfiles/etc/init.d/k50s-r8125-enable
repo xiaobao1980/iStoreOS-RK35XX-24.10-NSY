@@ -32,39 +32,82 @@ k50s_get_iface_target() {
     esac
 }
 
-k50s_rename_interfaces() {
-    local tmp="k50stmp"
-    local idx=0
-    local iface path target
+# 返回当前对应某设备路径的接口名（无则失败）
+k50s_iface_at_path() {
+    local want="$1" path
+    for iface in $(ls /sys/class/net 2>/dev/null); do
+        [ -d "/sys/class/net/$iface/device" ] || continue
+        path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
+        case "$path" in *$want*) echo "$iface"; return 0 ;; esac
+    done
+    return 1
+}
 
-    # 第一遍：把不在目标名上的接口先改到临时名，释放 eth0-4
+# 等待 5 个目标路径的接口都出现（3×r8125 PCI + 2×GMAC platform）
+k50s_wait_all_present() {
+    local n=0
+    for i in $(seq 1 40); do
+        n=0
+        for p in 0001:11:00.0 0002:21:00.0 0000:01:00.0 fe010000.ethernet fe2a0000.ethernet; do
+            k50s_iface_at_path "$p" >/dev/null 2>&1 && n=$((n+1))
+        done
+        [ "$n" -ge 5 ] && return 0
+        sleep 1
+    done
+    return 1
+}
+
+# 两遍重命名：先改临时名释放 eth0-4，再按路径定最终名（支持两两互换）
+k50s_rename_once() {
+    local tmp="k50stmp" idx=0 iface path target
     for iface in $(ls /sys/class/net 2>/dev/null); do
         [ -d "/sys/class/net/$iface/device" ] || continue
         path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
         target=$(k50s_get_iface_target "$path")
         [ -n "$target" ] || continue
         [ "$iface" = "$target" ] && continue
-
         ip link set "$iface" down 2>/dev/null
-        ip link set "$iface" name "${tmp}${idx}" 2>/dev/null && {
+        if ip link set "$iface" name "${tmp}${idx}" 2>/dev/null; then
             logger -t k50s-r8125-enable "tmp rename $iface ($path) -> ${tmp}${idx}"
             idx=$((idx+1))
-        } || logger -t k50s-r8125-enable "failed tmp rename $iface ($path)"
+        else
+            logger -t k50s-r8125-enable "failed tmp rename $iface ($path)"
+        fi
     done
-
-    # 第二遍：把临时名接口按设备路径改到最终目标名
     for iface in $(ls /sys/class/net 2>/dev/null); do
         case "$iface" in ${tmp}*) ;; *) continue ;; esac
         path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
         target=$(k50s_get_iface_target "$path")
-        [ -n "$target" ] || {
-            logger -t k50s-r8125-enable "unknown path for tmp $iface: $path"
-            continue
-        }
+        [ -n "$target" ] || { logger -t k50s-r8125-enable "unknown path for tmp $iface: $path"; continue; }
         ip link set "$iface" down 2>/dev/null
-        ip link set "$iface" name "$target" 2>/dev/null && \
-            logger -t k50s-r8125-enable "renamed $iface -> $target ($path)" || \
+        if ip link set "$iface" name "$target" 2>/dev/null; then
+            logger -t k50s-r8125-enable "renamed $iface -> $target ($path)"
+        else
             logger -t k50s-r8125-enable "failed rename $iface -> $target ($path)"
+        fi
+    done
+}
+
+# 校验每个目标路径是否已映射到正确接口名
+k50s_verify_all() {
+    local ok=1 p tgt cur
+    for p in 0001:11:00.0 0002:21:00.0 0000:01:00.0 fe010000.ethernet fe2a0000.ethernet; do
+        tgt=$(k50s_get_iface_target "$p")
+        cur=$(k50s_iface_at_path "$p")
+        [ "$cur" = "$tgt" ] || ok=0
+    done
+    [ "$ok" -eq 1 ]
+}
+
+# 记录最终映射，便于核对 ethX 与物理口对应
+k50s_log_mapping() {
+    local iface path pa tgt
+    for iface in $(ls /sys/class/net 2>/dev/null); do
+        [ -d "/sys/class/net/$iface/device" ] || continue
+        path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
+        pa=$(cat /sys/class/net/$iface/address 2>/dev/null)
+        tgt=$(k50s_get_iface_target "$path")
+        logger -t k50s-r8125-enable "MAP $iface <- $path (mac=$pa, expect=$tgt)"
     done
 }
 
@@ -99,32 +142,35 @@ boot() {
 
     # 所有重活放进后台，boot() 立即返回，不阻塞开机
     (
-        # 等待 3 个 r8125 接口出现（此时名字还不固定，不能按 eth0/1/2 判断）
-        count=0
-        for i in $(seq 1 30); do
-            count=0
-            for iface in $(ls /sys/class/net 2>/dev/null); do
-                [ -d "/sys/class/net/$iface/device" ] || continue
-                [ "$(cat /sys/class/net/$iface/device/driver 2>/dev/null | xargs basename 2>/dev/null)" = "r8125" ] && count=$((count+1))
-            done
-            [ "$count" -ge 3 ] && break
-            sleep 1
+        # 等待 5 个目标路径的接口都出现（3×r8125 PCI + 2×GMAC platform）
+        k50s_wait_all_present || logger -t k50s-r8125-enable "WARN: 等待超时，部分目标路径接口未出现，仍尝试重命名"
+
+        # 按路径重命名，最多重试 5 次确保 eth0-4 与物理口稳定对应
+        local tries=0 ok=1
+        while [ $tries -lt 5 ]; do
+            tries=$((tries+1))
+            k50s_rename_once
+            if k50s_verify_all; then
+                ok=0
+                break
+            fi
+            sleep 2
         done
-        [ "$count" -lt 3 ] && logger -t k50s-r8125-enable "WARN: only $count r8125 interfaces found, rename may be incomplete"
+        [ $ok -ne 0 ] && logger -t k50s-r8125-enable "WARN: 重命名重试后仍不全部一致"
 
-        # 按 PCI / platform 路径重命名所有接口，确保 eth0-4 与物理口一致
-        k50s_rename_interfaces
-
+        k50s_log_mapping
         logger -t k50s-r8125-enable "restarting network to pick up 2.5G ports"
         /etc/init.d/network restart
 
-        # 守护：若 r8125 被后续清理移除且 PCI 设备仍在，则重新加载
+        # 守护：若 r8125 被后续清理移除且 PCI 设备仍在，则重新加载并重命名
         while true; do
             sleep 30
             if [ -d /sys/bus/pci/devices/0000:01:00.0 ] && ! lsmod 2>/dev/null | grep -q "^r8125 "; then
                 local k=$(find /lib/modules -name "r8125.ko" 2>/dev/null | head -n1)
                 if [ -n "$k" ] && insmod "$k" aspm=0 2>/dev/null; then
                     logger -t k50s-r8125-enable "re-loaded r8125 (watchdog)"
+                    k50s_wait_all_present
+                    k50s_rename_once
                     /etc/init.d/network restart
                 fi
             fi
