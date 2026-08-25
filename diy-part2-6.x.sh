@@ -53,7 +53,7 @@ chmod 755 package/base-files/files/bin/coremark.sh
 
 
 # iStoreOS-settings
-git clone --depth=1 -b main https://github.com/xiaomeng9597/istoreos-settings package/default-settings
+git clone --depth=1 -b main https://github.com/xiaobao-studio/istoreos-settings package/default-settings
 
 
 # 定时限速插件
@@ -112,7 +112,7 @@ chmod 755 package/base-files/files/etc/init.d/opwifi
 
 
 # 电工大佬的rtl8367b驱动资源包，暂时使用这样替换
-wget https://github.com/xiaomeng9597/files/releases/download/files/rtl8367b.tar.gz
+wget https://github.com/xiaobao-studio/files/releases/download/files/rtl8367b.tar.gz
 tar -xvf rtl8367b.tar.gz
 
 
