@@ -1,0 +1,48 @@
+#!/bin/sh /etc/rc.common
+# ============================================================================
+# K50S MAX / K50S：板型专属 brcmfmac SDIO 固件软链
+# ----------------------------------------------------------------------------
+# brcmfmac 仅按 <chip>-sdio.<board>.bin 查找固件；本板 compatible=roceos,k50s-max，
+# 因此驱动只会请求 brcmfmac43455-sdio.roceos,k50s-max.bin（含 .clm_blob / .txt）。
+#
+# brcmfmac-firmware-43455-sdio 提供的是通用 brcmfmac43455-sdio.bin（及 .clm_blob），
+# 文件名对不上 → 内核报 “failed with error -2”。
+#
+# 本脚本在每次启动早期确保板型专属软链存在（指向通用固件），作为 diy-part2 构建期
+# 预建软链的兜底（覆盖固件包改名 / 升级后文件名变化等场景）。
+#
+# 仅对 roceos,k50s* 生效。
+# ============================================================================
+
+START=12
+
+boot() {
+    local board=""
+    if [ -r /proc/device-tree/compatible ]; then
+        board=$(tr '\0' '\n' < /proc/device-tree/compatible 2>/dev/null | tr '[:upper:]' '[:lower:]')
+    fi
+    case "$board" in
+        *k50s*) ;;
+        *) return 0 ;;
+    esac
+
+    local FW="/lib/firmware/brcm"
+    mkdir -p "$FW"
+
+    # 选择通用固件基名（兼容 broadcom / cypress 两种命名）
+    local base=""
+    for cand in brcmfmac43455-sdio cyfmac43455-sdio; do
+        [ -f "$FW/$cand.bin" ] && { base="$cand"; break; }
+    done
+    [ -n "$base" ] || {
+        logger -t k50s-brcmfmac-fw "WARN: generic $FW/brcmfmac43455-sdio.bin not found, skip"
+        return 0
+    }
+
+    ln -sf "$base.bin" "$FW/brcmfmac43455-sdio.roceos,k50s-max.bin"
+    [ -f "$FW/$base.clm_blob" ] && \
+        ln -sf "$base.clm_blob" "$FW/brcmfmac43455-sdio.roceos,k50s-max.clm_blob"
+
+    logger -t k50s-brcmfmac-fw "linked brcmfmac43455-sdio.roceos,k50s-max.* -> $base.*"
+    return 0
+}

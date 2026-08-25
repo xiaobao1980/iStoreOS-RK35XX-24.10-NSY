@@ -32,7 +32,7 @@ cp -a $GITHUB_WORKSPACE/configfiles/etc/* package/base-files/files/etc/
 # K50S MAX init 脚本强制启用：避免 sysupgrade 保留配置时 /etc/rc.d/ 没同步
 # 导致 k50s-r8125-enable / k50s-m2-enable 不执行
 mkdir -p package/base-files/files/etc/rc.d
-for script in k50s-fstab-guard k50s-r8125-enable k50s-m2-enable; do
+for script in k50s-fstab-guard k50s-r8125-enable k50s-m2-enable k50s-brcmfmac-fw; do
     [ -x "package/base-files/files/etc/init.d/$script" ] || continue
     start=$(sed -n 's/^START=\([0-9]*\).*/\1/p' package/base-files/files/etc/init.d/$script | head -n1)
     [ -n "$start" ] || continue
@@ -239,5 +239,15 @@ for line in "${CONFIG_K50S_LINES[@]}"; do
 	fi
 done
 echo "==> .config 已更新 (ROCEOS K50S / K50S MAX)"
+
+# --- K50S / K50S MAX: 板型专属 brcmfmac SDIO 固件软链（修复 brcmfmac43455-sdio.roceos,k50s-max.bin failed）---
+# brcmfmac 只按 <chip>-sdio.<board>.bin 找固件；本板 compatible=roceos,k50s-max，
+# 驱动只会请求 brcmfmac43455-sdio.roceos,k50s-max.bin。
+# 而 brcmfmac-firmware-43455-sdio 提供的是通用 brcmfmac43455-sdio.bin（及 .clm_blob）。
+# 在此预建板型专属软链，使首次启动 brcmfmac probe 即可命中（运行期再由 init 脚本兜底）。
+mkdir -p package/base-files/files/lib/firmware/brcm
+ln -sf brcmfmac43455-sdio.bin package/base-files/files/lib/firmware/brcm/brcmfmac43455-sdio.roceos,k50s-max.bin
+ln -sf brcmfmac43455-sdio.clm_blob package/base-files/files/lib/firmware/brcm/brcmfmac43455-sdio.roceos,k50s-max.clm_blob
+echo "==> 已预建 brcmfmac 板型专属固件软链 (roceos,k50s-max)"
 
 echo "==================== ROCEOS K50S / K50S MAX 适配完成 ===================="
