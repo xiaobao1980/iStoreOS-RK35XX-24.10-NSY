@@ -77,6 +77,26 @@ boot() {
             echo 1 > "$bridge/authorized" 2>/dev/null
         fi
 
+        # The JMS583 bridge (152d:0583) is board-resident and always enumerates,
+        # even with no M.2 module seated. Only when a module is inserted does a
+        # downstream child device (e.g. 2-1.2) appear. Detect that child first:
+        # no child => no SSD installed => nothing to mount (info, not a WARN).
+        local bn=$(basename "$bridge")
+        local child=""
+        for i in $(seq 1 5); do
+            for c in "$bridge"/"$bn".[0-9]*; do
+                [ -e "$c" ] || continue
+                child="$c"
+                break 2
+            done
+            sleep 1
+        done
+
+        if [ -z "$child" ]; then
+            logger -t k50s-m2-enable "no downstream device behind $bridge — no M.2 SSD installed, skip"
+            return 0
+        fi
+
         local found=0
         for i in $(seq 1 20); do
             if [ -b /dev/sda ] || [ -b /dev/sda1 ]; then
@@ -93,7 +113,7 @@ boot() {
                 logger -t k50s-m2-enable "M.2 already mounted at $M2_MP by hotplug"
             fi
         else
-            logger -t k50s-m2-enable "WARN: /dev/sda did not appear within 20s after re-authorizing $bridge"
+            logger -t k50s-m2-enable "WARN: /dev/sda did not appear within 20s after re-authorizing $bridge (downstream device present but no block dev)"
         fi
     ) &
 
