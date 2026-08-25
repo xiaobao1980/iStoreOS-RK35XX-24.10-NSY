@@ -17,6 +17,57 @@
 
 START=25
 
+# 按 PCI / platform 设备路径把接口重命名为确定性名字。
+# K50S MAX 三个 r8125 挂在不同 PCIe root port，probe 顺序会受 M.2 影响；
+# 两个 GMAC 是平台设备，路径固定。按路径命名可保证 eth0-4 与机箱物理口一一对应。
+k50s_get_iface_target() {
+    local path="$1"
+    case "$path" in
+        *0001:11:00.0*) echo "eth0" ;;
+        *0002:21:00.0*) echo "eth1" ;;
+        *0000:01:00.0*) echo "eth2" ;;
+        *fe010000.ethernet*) echo "eth3" ;;
+        *fe2a0000.ethernet*) echo "eth4" ;;
+        *) echo "" ;;
+    esac
+}
+
+k50s_rename_interfaces() {
+    local tmp="k50stmp"
+    local idx=0
+    local iface path target
+
+    # 第一遍：把不在目标名上的接口先改到临时名，释放 eth0-4
+    for iface in $(ls /sys/class/net 2>/dev/null); do
+        [ -d "/sys/class/net/$iface/device" ] || continue
+        path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
+        target=$(k50s_get_iface_target "$path")
+        [ -n "$target" ] || continue
+        [ "$iface" = "$target" ] && continue
+
+        ip link set "$iface" down 2>/dev/null
+        ip link set "$iface" name "${tmp}${idx}" 2>/dev/null && {
+            logger -t k50s-r8125-enable "tmp rename $iface ($path) -> ${tmp}${idx}"
+            idx=$((idx+1))
+        } || logger -t k50s-r8125-enable "failed tmp rename $iface ($path)"
+    done
+
+    # 第二遍：把临时名接口按设备路径改到最终目标名
+    for iface in $(ls /sys/class/net 2>/dev/null); do
+        case "$iface" in ${tmp}*) ;; *) continue ;; esac
+        path=$(readlink -f "/sys/class/net/$iface/device" 2>/dev/null)
+        target=$(k50s_get_iface_target "$path")
+        [ -n "$target" ] || {
+            logger -t k50s-r8125-enable "unknown path for tmp $iface: $path"
+            continue
+        }
+        ip link set "$iface" down 2>/dev/null
+        ip link set "$iface" name "$target" 2>/dev/null && \
+            logger -t k50s-r8125-enable "renamed $iface -> $target ($path)" || \
+            logger -t k50s-r8125-enable "failed rename $iface -> $target ($path)"
+    done
+}
+
 boot() {
     local board=""
     if [ -r /proc/device-tree/compatible ]; then
@@ -48,16 +99,22 @@ boot() {
 
     # 所有重活放进后台，boot() 立即返回，不阻塞开机
     (
-        # 等待 2.5G 口（eth0/eth1/eth2）出现
-        for i in $(seq 1 15); do
-            [ -d /sys/class/net/eth0 ] && [ -d /sys/class/net/eth1 ] && [ -d /sys/class/net/eth2 ] && break
+        # 等待 3 个 r8125 接口出现（此时名字还不固定，不能按 eth0/1/2 判断）
+        count=0
+        for i in $(seq 1 30); do
+            count=0
+            for iface in $(ls /sys/class/net 2>/dev/null); do
+                [ -d "/sys/class/net/$iface/device" ] || continue
+                [ "$(cat /sys/class/net/$iface/device/driver 2>/dev/null | xargs basename 2>/dev/null)" = "r8125" ] && count=$((count+1))
+            done
+            [ "$count" -ge 3 ] && break
             sleep 1
         done
-        # 再等 GMAC 重命名完成（eth3 出现），避免 network restart 与重命名竞争
-        for i in $(seq 1 20); do
-            [ -d /sys/class/net/eth3 ] && break
-            sleep 1
-        done
+        [ "$count" -lt 3 ] && logger -t k50s-r8125-enable "WARN: only $count r8125 interfaces found, rename may be incomplete"
+
+        # 按 PCI / platform 路径重命名所有接口，确保 eth0-4 与物理口一致
+        k50s_rename_interfaces
+
         logger -t k50s-r8125-enable "restarting network to pick up 2.5G ports"
         /etc/init.d/network restart
 
