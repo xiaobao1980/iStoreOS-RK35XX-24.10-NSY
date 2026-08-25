@@ -71,6 +71,7 @@
 - [peter-evans/repository-dispatch](https://github.com/peter-evans/repository-dispatch)
 - [draco-china/istoreos-actions](https://github.com/draco-china/istoreos-actions)
 - [zhoufuli/immortalwrt-rk356x](https://github.com/zhoufuli/immortalwrt-rk356x)
+- [xiaomeng9597/iStoreOS-RK35XX-24.10-NSY](https://github.com/xiaomeng9597/iStoreOS-RK35XX-24.10-NSY))
 
 ## 捐赠
 - 如果你觉得此系统好用的话，请我喝一杯82年的凉白开吧，感谢！
