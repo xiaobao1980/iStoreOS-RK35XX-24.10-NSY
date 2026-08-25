@@ -1,6 +1,6 @@
 # iStore OS 固件 | 定制的麻烦自行 fork 修改
 
-[![iStore使用文档](https://img.shields.io/badge/使用文档-iStore%20OS-brightgreen?style=flat-square)](https://doc.linkease.com/zh/guide/istoreos) [![最新固件下载](https://img.shields.io/github/v/release/xiaomeng9597/Actions-iStoreOS-RK35XX-24.10?style=flat-square&label=最新固件下载)](../../releases/latest)
+[![iStore使用文档](https://img.shields.io/badge/使用文档-iStore%20OS-brightgreen?style=flat-square)](https://doc.linkease.com/zh/guide/istoreos) [![最新固件下载](https://img.shields.io/github/v/release/xiaobao-studio/Actions-iStoreOS-RK35XX-24.10?style=flat-square&label=最新固件下载)](../../releases/latest)
 
 ![支持设备](https://img.shields.io/badge/支持设备:-blueviolet.svg?style=flat-square) ![H88K](https://img.shields.io/badge/H88K-blue.svg?style=flat-square) ![H66K](https://img.shields.io/badge/H66K-blue.svg?style=flat-square) ![H68K](https://img.shields.io/badge/H68K-blue.svg?style=flat-square) ![H69K](https://img.shields.io/badge/H69K-blue.svg?style=flat-square) ![R5S](https://img.shields.io/badge/R5S-blue.svg?style=flat-square) ![R6S](https://img.shields.io/badge/R6S-blue.svg?style=flat-square) ![R66S](https://img.shields.io/badge/R66S-blue.svg?style=flat-square) ![R68S](https://img.shields.io/badge/R68S-blue.svg?style=flat-square) ![STATION P2](https://img.shields.io/badge/STATION%20P2-blue.svg?style=flat-square) ![T68M](https://img.shields.io/badge/T68M-blue.svg?style=flat-square) ![Orange Pi 5 Plus](https://img.shields.io/badge/Orange%20Pi%205%20Plus-blue.svg?style=flat-square)
 
@@ -76,7 +76,7 @@
 - 如果你觉得此系统好用的话，请我喝一杯82年的凉白开吧，感谢！
 
 -支付宝-
-# <img src="https://raw.githubusercontent.com/xiaomeng9597/webfiles/refs/heads/main/zfb.jpg" alt="支付宝收款码" width="200" />
+# <img src="https://raw.githubusercontent.com/xiaobao-studio/webfiles/refs/heads/main/zfb.jpg" alt="支付宝收款码" width="200" />
 
 -微信-
-# <img src="https://raw.githubusercontent.com/xiaomeng9597/webfiles/refs/heads/main/weixin.jpg" alt="微信收款码" width="200" />
+# <img src="https://raw.githubusercontent.com/xiaobao-studio/webfiles/refs/heads/main/weixin.jpg" alt="微信收款码" width="200" />
