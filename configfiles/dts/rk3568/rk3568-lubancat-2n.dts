@@ -9,7 +9,10 @@
 #include <dt-bindings/leds/common.h>
 #include <dt-bindings/pinctrl/rockchip.h>
 #include <dt-bindings/soc/rockchip,vop2.h>
-#include "rk3568.dtsi"
+/* 改用尖括号形式：编译时由 cpp 的 -I .../arch/arm64/boot/dts 解析，
+   与 nsy/bdy 板卡约定一致；避免板级 DTS 仅在 configfiles/ 外置时
+   因相对目录无 rk3568.dtsi 而报 fatal error: rk3568.dtsi: No such file */
+#include <rockchip/rk3568.dtsi>
 
 / {
     model = "EmbedFire LubanCat 2N";
